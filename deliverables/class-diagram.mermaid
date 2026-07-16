@@ -1,0 +1,154 @@
+classDiagram
+    direction TB
+
+    class Database {
+        -db: Database
+        +getInstance() Database
+        +initialize() void
+        +close() void
+    }
+
+    class AuthService {
+        +login(username, password) LoginResult
+        +logout(userId) void
+        +refreshToken(refreshToken) TokenPair
+        +changePassword(userId, oldPwd, newPwd) void
+        +checkLock(username) LockStatus
+        +recordFail(username) void
+        +clearLock(username) void
+    }
+
+    class AssetService {
+        +list(query: AssetQuery) PaginatedResult~Asset~
+        +getById(id) Asset
+        +create(data: AssetFormData) Asset
+        +update(id, data: AssetFormData) Asset
+        +delete(id) void
+        +batchDelete(ids) void
+        +import(dataList) ImportResult
+        +generateAssetCode() string
+    }
+
+    class DepartmentService {
+        +list() Department[]
+        +create(name) Department
+        +update(id, name) Department
+        +delete(id) void
+    }
+
+    class InventoryService {
+        +listTasks() InventoryTask[]
+        +createTask(data) InventoryTask
+        +updateRecord(taskId, recordId, status, remark) InventoryRecord
+    }
+
+    class ChangeLogService {
+        +list(query) ChangeLog[]
+        +create(log) ChangeLog
+    }
+
+    class UserService {
+        +list() User[]
+        +create(data) User
+        +update(id, data) User
+        +delete(id) void
+        +resetPassword(id, newPwd) void
+    }
+
+    class DashboardService {
+        +getStats() DashboardStats
+    }
+
+    class BackupService {
+        +export() Buffer
+        +restore(fileBuffer) void
+        +validateDb(buffer) boolean
+    }
+
+    class AuditLogService {
+        +list(query) PaginatedResult~AuditLog~
+        +create(log) void
+    }
+
+    class AuthMiddleware {
+        +authenticate(req, res, next) void
+    }
+
+    class RoleMiddleware {
+        +authorize(roles: Role[]) Middleware
+    }
+
+    class ApiClient {
+        -instance: AxiosInstance
+        +get~T~(url, params) ApiResponse~T~
+        +post~T~(url, data) ApiResponse~T~
+        +put~T~(url, data) ApiResponse~T~
+        +delete~T~(url) ApiResponse~T~
+        +setToken(token) void
+        +clearToken() void
+    }
+
+    class UseAuthStore {
+        +currentUser: User | null
+        +token: string | null
+        +refreshToken: string | null
+        +isAuthenticated: boolean
+        +loading: boolean
+        +login(username, password) Promise~void~
+        +logout() Promise~void~
+        +refreshAccessToken() Promise~void~
+        +changePassword(oldPwd, newPwd) Promise~void~
+        +hasPermission(action) boolean
+    }
+
+    class UseAssetStore {
+        +assets: Asset[]
+        +changeLogs: ChangeLog[]
+        +loading: boolean
+        +fetchAssets() Promise~void~
+        +addAsset(data) Promise~void~
+        +updateAsset(id, data) Promise~void~
+        +deleteAsset(id) Promise~void~
+        +batchDeleteAssets(ids) Promise~void~
+        +importAssets(dataList) Promise~void~
+        +fetchChangeLogs() Promise~void~
+    }
+
+    class UseDeptStore {
+        +departments: Department[]
+        +loading: boolean
+        +fetchDepartments() Promise~void~
+        +addDept(name) Promise~void~
+        +updateDept(id, name) Promise~void~
+        +deleteDept(id) Promise~void~
+    }
+
+    class UseInventoryStore {
+        +tasks: InventoryTask[]
+        +loading: boolean
+        +fetchTasks() Promise~void~
+        +addTask(data) Promise~void~
+        +updateRecordStatus(taskId, recordId, status, remark) Promise~void~
+    }
+
+    Database --> AuthService : uses
+    Database --> AssetService : uses
+    Database --> DepartmentService : uses
+    Database --> InventoryService : uses
+    Database --> ChangeLogService : uses
+    Database --> UserService : uses
+    Database --> DashboardService : uses
+    Database --> BackupService : uses
+    Database --> AuditLogService : uses
+
+    AuthService --> AuditLogService : records
+    AssetService --> ChangeLogService : records
+    AssetService --> AuditLogService : records
+    DepartmentService --> AuditLogService : records
+    UserService --> AuditLogService : records
+    BackupService --> AuditLogService : records
+
+    UseAuthStore --> ApiClient : calls
+    UseAssetStore --> ApiClient : calls
+    UseDeptStore --> ApiClient : calls
+    UseInventoryStore --> ApiClient : calls

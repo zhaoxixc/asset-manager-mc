@@ -1,0 +1,48 @@
+sequenceDiagram
+    actor User
+    participant Login as Login.tsx
+    participant AuthStore as useAuthStore
+    participant ApiClient as api.ts
+    participant AuthRoute as routes/auth.ts
+    participant AuthService as auth.service.ts
+    participant DB as Database
+    participant AuditLog as audit-log.service.ts
+
+    User->>Login: 输入用户名密码，点击登录
+    Login->>AuthStore: login(username, password)
+    AuthStore->>ApiClient: POST /api/auth/login
+    ApiClient->>AuthRoute: 路由处理
+
+    AuthRoute->>AuthService: login(username, password)
+    AuthService->>DB: 查询 login_locks 表
+    DB-->>AuthService: LockStatus
+
+    alt 账户已锁定
+        AuthService-->>AuthRoute: {locked: true, remaining: 5min}
+        AuthRoute-->>ApiClient: 429 {message: "账户已锁定"}
+        ApiClient-->>AuthStore: 抛出错误
+        AuthStore-->>Login: 显示锁定提示
+    else 未锁定
+        AuthService->>DB: 查询 users 表
+        DB-->>AuthService: UserRow
+
+        alt 用户不存在
+            AuthService->>DB: 更新 login_locks fail_count+1
+            AuthService-->>AuthRoute: {success: false, message: "用户名或密码错误"}
+        else 密码校验
+            AuthService->>AuthService: bcrypt.compare(password, hash)
+            alt 密码错误
+                AuthService->>DB: 更新 login_locks fail_count+1
+                AuthService-->>AuthRoute: {success: false}
+            else 密码正确
+                AuthService->>DB: 清除 login_locks 记录
+                AuthService->>AuthService: jwt.sign({userId, username, role})
+                AuthService->>AuditLog: create(登录审计日志)
+                AuthService-->>AuthRoute: {token, refreshToken, user}
+                AuthRoute-->>ApiClient: 200 {code:0, data: {token, refreshToken, user}}
+                ApiClient-->>AuthStore: 设置 token 到 localStorage + store state
+                AuthStore-->>Login: isAuthenticated = true
+                Login->>User: 跳转主页
+            end
+        end
+    end

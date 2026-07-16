@@ -1,0 +1,43 @@
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Noto Sans SC'),
+       local('NotoSansSC-Regular'),
+       local('思源黑体'),
+       url('/fonts/NotoSansSC-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: local('Noto Sans SC Medium'),
+       local('NotoSansSC-Medium'),
+       local('思源黑体'),
+       url('/fonts/NotoSansSC-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: local('Noto Sans SC SemiBold'),
+       local('NotoSansSC-SemiBold'),
+       local('思源黑体'),
+       url('/fonts/NotoSansSC-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Noto Sans SC Bold'),
+       local('NotoSansSC-Bold'),
+       local('思源黑体'),
+       url('/fonts/NotoSansSC-Bold.ttf') format('truetype');
+}
