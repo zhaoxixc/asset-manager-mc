@@ -20,7 +20,7 @@ export function createUserRouter(db: Database, ldapService: LdapService | null):
 
   /** GET /api/users/options - 用户姓名选项（供资产表单下拉使用，所有登录用户可访问，不含邮箱等敏感信息） */
   router.get('/options', (_req: Request, res: Response) => {
-    const rows = db.all("SELECT username, real_name, cn_name FROM users WHERE status = 'active' ORDER BY created_at ASC");
+    const rows = db.all("SELECT username, real_name, cn_name FROM users WHERE status = 'active' ORDER BY CASE WHEN auth_source = 'local' THEN 0 ELSE 1 END, LOWER(username) ASC");
     const options = rows.map((r) => ({
       username: r.username as string,
       displayName: (r.cn_name as string) || (r.real_name as string) || (r.username as string),

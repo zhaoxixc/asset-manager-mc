@@ -12,8 +12,11 @@ export class UserService {
   private auditLogService: AuditLogService;
   constructor(db: Database, auditLogService: AuditLogService) { this.db = db; this.auditLogService = auditLogService; }
 
+  /** 排序：本地用户在前，LDAP用户在后，同组内按用户名字母序（不区分大小写） */
+  private static ORDER_SQL = "ORDER BY CASE WHEN auth_source = 'local' THEN 0 ELSE 1 END, LOWER(username) ASC";
+
   list(): Record<string, unknown>[] {
-    const rows = this.db.all('SELECT * FROM users ORDER BY created_at ASC');
+    const rows = this.db.all(`SELECT * FROM users ${UserService.ORDER_SQL}`);
     return rows.map((row) => { const camelRow = toCamelCase(row) as Record<string, unknown>; delete camelRow.password; return camelRow; });
   }
 
