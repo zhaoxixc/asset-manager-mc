@@ -14,3 +14,6 @@ server/data/
 
 # 旧版部署文档
 deploy-guide.md
+
+# 内部运维手册（仅本地保留）
+docs/系统使用与运维手册.md
