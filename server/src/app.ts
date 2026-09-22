@@ -9,6 +9,7 @@ import { createInventoryRouter } from './routes/inventory.js';
 import { createChangeLogRouter } from './routes/change-logs.js';
 import { createUserRouter } from './routes/users.js';
 import { createDashboardRouter } from './routes/dashboard.js';
+import { createAiRouter } from './routes/ai.js';
 import { createBackupRouter } from './routes/backup.js';
 import { createAuditLogRouter } from './routes/audit-logs.js';
 import { createAssetStatusRouter } from './routes/asset-statuses.js';
@@ -80,6 +81,7 @@ export function createApp(db: Database): express.Application {
   app.use('/api/change-logs', createChangeLogRouter(db));
   app.use('/api/users', createUserRouter(db, ldapService));
   app.use('/api/dashboard', createDashboardRouter(db));
+  app.use('/api/ai', createAiRouter(db));
   app.use('/api/backup', createBackupRouter(db));
   app.use('/api/audit-logs', createAuditLogRouter(db));
 

@@ -147,6 +147,31 @@ CREATE TABLE IF NOT EXISTS mail_logs (
   created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
+-- AI 模型配置表
+CREATE TABLE IF NOT EXISTS ai_models (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  api_key TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+-- AI 对话记录表
+CREATE TABLE IF NOT EXISTS ai_chat_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL DEFAULT '',
+  username TEXT NOT NULL DEFAULT '',
+  question TEXT NOT NULL DEFAULT '',
+  answer TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'ok',
+  error TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
 -- 系统信息表（存储企业名称、Logo等全局配置）
 CREATE TABLE IF NOT EXISTS system_info (
   key TEXT PRIMARY KEY,

@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
+  SmartToy as AiIcon,
   Inventory2 as AssetIcon,
   Business as DeptIcon,
   Category as CategoryIcon,
@@ -36,6 +37,7 @@ import {
   Lock as LockIcon,
 } from '@mui/icons-material';
 import Dashboard from './Dashboard';
+import AIAssistant from './AIAssistant';
 import AssetTable from './AssetTable';
 import DeptManager from './DeptManager';
 import AssetTypeManager from './AssetTypeManager';
@@ -65,6 +67,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { key: 'dashboard', label: '统计看板', icon: <DashboardIcon /> },
+  { key: 'ai', label: 'AI 助手', icon: <AiIcon /> },
   { key: 'assets', label: '资产列表', icon: <AssetIcon /> },
   { key: 'departments', label: '部门管理', icon: <DeptIcon />, requiredRole: [Role.SUPER_ADMIN, Role.ADMIN] },
   { key: 'asset-types', label: '资产类型', icon: <CategoryIcon />, requiredRole: [Role.SUPER_ADMIN, Role.ADMIN] },
@@ -78,6 +81,7 @@ const navItems: NavItem[] = [
 /** 页面映射 */
 const pageComponents: Record<string, React.FC<{ globalSearch: string }>> = {
   dashboard: Dashboard,
+  ai: AIAssistant,
   assets: AssetTable,
   departments: DeptManager,
   'asset-types': AssetTypeManager,

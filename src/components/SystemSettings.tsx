@@ -24,6 +24,7 @@ import {
   Tooltip,
   Checkbox,
   FormControlLabel,
+  Chip,
   Grid,
 } from '@mui/material';
 import {
@@ -75,6 +76,24 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
   const [testMailTo, setTestMailTo] = useState<string>('');
   const [testMailSending, setTestMailSending] = useState<boolean>(false);
 
+  // AI 模型配置
+  interface AiModelConfig {
+    id: string; name: string; baseUrl: string; model: string;
+    enabled: boolean; hasApiKey: boolean; apiKeyMasked: string;
+  }
+  const [aiModels, setAiModels] = useState<AiModelConfig[]>([]);
+  const [aiDialogOpen, setAiDialogOpen] = useState<boolean>(false);
+  const [aiEditingId, setAiEditingId] = useState<string>('');
+  const [aiName, setAiName] = useState<string>('');
+  const [aiBaseUrl, setAiBaseUrl] = useState<string>('');
+  const [aiApiKey, setAiApiKey] = useState<string>('');
+  const [aiModel, setAiModel] = useState<string>('');
+  const [aiEnabled, setAiEnabled] = useState<boolean>(true);
+  const [aiError, setAiError] = useState<string>('');
+  const [aiSaving, setAiSaving] = useState<boolean>(false);
+  const [aiTestingId, setAiTestingId] = useState<string>('');
+  const [aiTestResult, setAiTestResult] = useState<Record<string, { ok: boolean; text: string }>>({});
+
   const [prefixes, setPrefixes] = useState<CodePrefixItem[]>([]);
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
   const [editingId, setEditingId] = useState<string>('');
@@ -87,7 +106,15 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
   useEffect(() => {
     fetchPrefixes();
     fetchSystemInfo();
+    fetchAiModels();
   }, []);
+
+  const fetchAiModels = async () => {
+    try {
+      const res = await api.get('/ai/models');
+      setAiModels(res.data.data || []);
+    } catch { setAiModels([]); }
+  };
 
   const fetchSystemInfo = async () => {
     try {
@@ -214,6 +241,64 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
       setSnackbar({ open: true, message, severity: 'error' });
     } finally {
       setTestMailSending(false);
+    }
+  };
+
+  const openAiDialog = (model?: AiModelConfig) => {
+    setAiEditingId(model?.id || '');
+    setAiName(model?.name || '');
+    setAiBaseUrl(model?.baseUrl || '');
+    setAiApiKey('');
+    setAiModel(model?.model || '');
+    setAiEnabled(model?.enabled ?? true);
+    setAiError('');
+    setAiDialogOpen(true);
+  };
+
+  const handleSaveAiModel = async () => {
+    if (!aiName.trim() || !aiBaseUrl.trim() || !aiModel.trim()) { setAiError('名称、接口地址、模型名称不能为空'); return; }
+    if (!aiEditingId && !aiApiKey.trim()) { setAiError('API Key 不能为空'); return; }
+    setAiSaving(true);
+    try {
+      if (aiEditingId) {
+        await api.put(`/ai/models/${aiEditingId}`, { name: aiName.trim(), baseUrl: aiBaseUrl.trim(), apiKey: aiApiKey.trim(), model: aiModel.trim(), enabled: aiEnabled });
+      } else {
+        await api.post('/ai/models', { name: aiName.trim(), baseUrl: aiBaseUrl.trim(), apiKey: aiApiKey.trim(), model: aiModel.trim(), enabled: aiEnabled });
+      }
+      setAiDialogOpen(false);
+      setSnackbar({ open: true, message: 'AI 模型配置已保存', severity: 'success' });
+      fetchAiModels();
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存失败';
+      setAiError(message);
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const handleDeleteAiModel = async (model: AiModelConfig) => {
+    if (!window.confirm(`确定要删除模型配置「${model.name}」吗？`)) return;
+    try {
+      await api.delete(`/ai/models/${model.id}`);
+      setSnackbar({ open: true, message: '删除成功', severity: 'success' });
+      fetchAiModels();
+    } catch {
+      setSnackbar({ open: true, message: '删除失败', severity: 'error' });
+    }
+  };
+
+  const handleTestAiModel = async (model: AiModelConfig) => {
+    setAiTestingId(model.id);
+    setAiTestResult((prev) => ({ ...prev, [model.id]: { ok: true, text: '测试中…' } }));
+    try {
+      const res = await api.post(`/ai/models/${model.id}/test`);
+      const d = res.data.data;
+      setAiTestResult((prev) => ({ ...prev, [model.id]: { ok: true, text: `连通（${d.latencyMs}ms）` } }));
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '测试失败';
+      setAiTestResult((prev) => ({ ...prev, [model.id]: { ok: false, text: message.slice(0, 80) } }));
+    } finally {
+      setAiTestingId('');
     }
   };
 
@@ -490,6 +575,83 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
           </Box>
         </CardContent>
       </Card>
+
+      {/* AI 模型配置 */}
+      <Card elevation={0} sx={{ border: '1px solid #e8eaed', borderRadius: 2, mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>AI 模型配置</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            配置 OpenAI 兼容接口的模型（DeepSeek / 智谱GLM / Kimi / 本地Ollama等）。启用后，所有用户可在「AI 助手」页面通过对话查询资产信息。API Key 保存后不再回显。
+          </Typography>
+          {aiModels.length > 0 ? (
+            <TableContainer sx={{ mb: 2, border: '1px solid #e8eaed', borderRadius: 1 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>名称</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>接口地址</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>模型</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }} align="center">API Key</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }} align="center">启用</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }} align="center">操作</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {aiModels.map((m) => (
+                    <TableRow key={m.id} hover>
+                      <TableCell>{m.name}</TableCell>
+                      <TableCell><Typography variant="caption" color="text.secondary">{m.baseUrl}</Typography></TableCell>
+                      <TableCell>{m.model}</TableCell>
+                      <TableCell align="center"><Typography variant="caption" color="text.secondary">{m.apiKeyMasked}</Typography></TableCell>
+                      <TableCell align="center">
+                        <Chip label={m.enabled ? '启用' : '停用'} size="small" sx={{ bgcolor: m.enabled ? '#e6f4ea' : '#f1f3f4', color: m.enabled ? '#34a853' : '#5f6368' }} />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Box sx={{ display: 'inline-flex', gap: 0.5 }}>
+                          <Tooltip title="测试连通性">
+                            <span><Button size="small" variant="outlined" disabled={aiTestingId === m.id} onClick={() => handleTestAiModel(m)} sx={{ minWidth: 56, textTransform: 'none' }}>
+                              {aiTestingId === m.id ? '测试中…' : '测试'}
+                            </Button></span>
+                          </Tooltip>
+                          <Tooltip title="编辑"><IconButton size="small" onClick={() => openAiDialog(m)}><EditIcon fontSize="small" /></IconButton></Tooltip>
+                          <Tooltip title="删除"><span><IconButton size="small" color="error" onClick={() => handleDeleteAiModel(m)}><DeleteIcon fontSize="small" /></IconButton></span></Tooltip>
+                        </Box>
+                        {aiTestResult[m.id] && (
+                          <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: aiTestResult[m.id].ok ? '#34a853' : '#d93025' }}>
+                            {aiTestResult[m.id].text}
+                          </Typography>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Alert severity="info" sx={{ mb: 2 }}>尚未配置 AI 模型。点击下方按钮添加第一个模型（如 DeepSeek、智谱GLM、Kimi 或本地 Ollama）。</Alert>
+          )}
+          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => openAiDialog()} sx={{ textTransform: 'none' }}>
+            添加模型
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* AI 模型 新增/编辑 对话框 */}
+      <Dialog open={aiDialogOpen} onClose={() => setAiDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600 }}>{aiEditingId ? '编辑 AI 模型' : '添加 AI 模型'}</DialogTitle>
+        <DialogContent>
+          <TextField fullWidth label="名称" value={aiName} onChange={(e) => { setAiName(e.target.value); setAiError(''); }} placeholder="如：DeepSeek / 智谱GLM / 本地Ollama" size="small" sx={{ mt: 1, mb: 2 }} />
+          <TextField fullWidth label="接口地址（Base URL）" value={aiBaseUrl} onChange={(e) => { setAiBaseUrl(e.target.value); setAiError(''); }} placeholder="如：https://open.bigmodel.cn/api/coding/paas/v4 或 http://localhost:11434/v1" size="small" sx={{ mb: 2 }} helperText="OpenAI 兼容接口地址（不含 /chat/completions）；智谱Coding套餐用 /api/coding/paas/v4" />
+          <TextField fullWidth label="模型名称" value={aiModel} onChange={(e) => { setAiModel(e.target.value); setAiError(''); }} placeholder="如：deepseek-chat / glm-4 / qwen2.5:7b" size="small" sx={{ mb: 2 }} />
+          <TextField fullWidth label={aiEditingId ? 'API Key（留空不修改）' : 'API Key'} type="password" value={aiApiKey} onChange={(e) => { setAiApiKey(e.target.value); setAiError(''); }} size="small" sx={{ mb: 2 }} />
+          <FormControlLabel control={<Checkbox checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />} label="启用（所有用户可在 AI 助手页面对话）" />
+          {aiError && <Alert severity="error" sx={{ mt: 1 }}>{aiError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setAiDialogOpen(false)} sx={{ textTransform: 'none' }}>取消</Button>
+          <Button variant="contained" onClick={handleSaveAiModel} disabled={aiSaving} sx={{ textTransform: 'none' }}>{aiSaving ? '保存中…' : '保存'}</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* 审计日志清理配置 */}
       <Card elevation={0} sx={{ border: '1px solid #e8eaed', borderRadius: 2, mb: 3 }}>
