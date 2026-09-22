@@ -26,12 +26,12 @@ export function seedDatabase(db: Database): void {
 
   db.run(
     `INSERT INTO users (id, username, password, real_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [uuidv4(), 'zhangsan', bcrypt.hashSync('123456', SALT_ROUNDS), '张三', 'admin', 'active', now, now]
+    [uuidv4(), 'qianjie', bcrypt.hashSync('123456', SALT_ROUNDS), 'qianjie', 'admin', 'active', now, now]
   );
 
   db.run(
     `INSERT INTO users (id, username, password, real_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [uuidv4(), 'lisi', bcrypt.hashSync('123456', SALT_ROUNDS), '李四', 'user', 'active', now, now]
+    [uuidv4(), 'qiansy', bcrypt.hashSync('123456', SALT_ROUNDS), 'qiansy', 'user', 'active', now, now]
   );
 
   const departments = ['研发部', '市场部', '财务部', '人力资源部', '运维部', '行政部'];
