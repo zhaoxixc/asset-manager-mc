@@ -29,6 +29,7 @@ export function createAiRouter(db: Database): Router {
       const key = String(r.api_key || '');
       return {
         id: r.id, name: r.name, baseUrl: r.base_url, model: r.model,
+        apiFormat: r.api_format === 'anthropic' ? 'anthropic' : 'openai',
         enabled: !!r.enabled, hasApiKey: !!key,
         apiKeyMasked: key ? `${key.slice(0, 4)}****${key.slice(-4)}` : '',
       };
@@ -38,7 +39,7 @@ export function createAiRouter(db: Database): Router {
 
   /** POST /api/ai/models - 新增模型配置 */
   router.post('/models', (req: Request, res: Response) => {
-    const { name, baseUrl, apiKey, model, enabled } = req.body;
+    const { name, baseUrl, apiKey, model, enabled, apiFormat } = req.body;
     if (!name?.trim() || !baseUrl?.trim() || !model?.trim()) {
       res.status(400).json(error(40000, '名称、接口地址、模型名称不能为空'));
       return;
@@ -47,11 +48,12 @@ export function createAiRouter(db: Database): Router {
       res.status(400).json(error(40000, 'API Key 不能为空'));
       return;
     }
+    const fmt = apiFormat === 'anthropic' ? 'anthropic' : 'openai';
     const id = uuidv4();
     const now = dayjs().format('YYYY-MM-DD HH:mm:ss');
     db.run(
-      'INSERT INTO ai_models (id, name, base_url, api_key, model, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, name.trim(), baseUrl.trim(), apiKey.trim(), model.trim(), enabled === false ? 0 : 1, now, now]
+      'INSERT INTO ai_models (id, name, base_url, api_key, model, api_format, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, name.trim(), baseUrl.trim(), apiKey.trim(), model.trim(), fmt, enabled === false ? 0 : 1, now, now]
     );
     db.scheduleSave();
     res.status(201).json(success({ id }, '新增成功'));
@@ -64,15 +66,16 @@ export function createAiRouter(db: Database): Router {
       res.status(404).json(error(40400, '模型配置不存在'));
       return;
     }
-    const { name, baseUrl, apiKey, model, enabled } = req.body;
+    const { name, baseUrl, apiKey, model, enabled, apiFormat } = req.body;
     if (!name?.trim() || !baseUrl?.trim() || !model?.trim()) {
       res.status(400).json(error(40000, '名称、接口地址、模型名称不能为空'));
       return;
     }
     const newKey = apiKey?.trim() ? String(apiKey).trim() : String(existing.api_key || '');
+    const fmt = apiFormat === 'anthropic' ? 'anthropic' : 'openai';
     db.run(
-      'UPDATE ai_models SET name = ?, base_url = ?, api_key = ?, model = ?, enabled = ?, updated_at = ? WHERE id = ?',
-      [name.trim(), baseUrl.trim(), newKey, model.trim(), enabled === false ? 0 : 1, dayjs().format('YYYY-MM-DD HH:mm:ss'), req.params.id]
+      'UPDATE ai_models SET name = ?, base_url = ?, api_key = ?, model = ?, api_format = ?, enabled = ?, updated_at = ? WHERE id = ?',
+      [name.trim(), baseUrl.trim(), newKey, model.trim(), fmt, enabled === false ? 0 : 1, dayjs().format('YYYY-MM-DD HH:mm:ss'), req.params.id]
     );
     db.scheduleSave();
     res.json(success(null, '更新成功'));
@@ -99,6 +102,7 @@ export function createAiRouter(db: Database): Router {
     }
     const cfg: AiModelConfig = {
       baseUrl: String(cfgRow.base_url), apiKey: String(cfgRow.api_key || ''), model: String(cfgRow.model),
+      apiFormat: cfgRow.api_format === 'anthropic' ? 'anthropic' : 'openai',
     };
     if (!cfg.apiKey) {
       res.status(400).json(error(40000, '该配置缺少 API Key'));
@@ -123,7 +127,7 @@ export function createAiRouter(db: Database): Router {
       res.status(400).json(error(40000, '没有可用的 AI 模型，请联系管理员在系统设置中配置'));
       return;
     }
-    const cfg: AiModelConfig = { baseUrl: String(cfgRow.base_url), apiKey: String(cfgRow.api_key || ''), model: String(cfgRow.model) };
+    const cfg: AiModelConfig = { baseUrl: String(cfgRow.base_url), apiKey: String(cfgRow.api_key || ''), model: String(cfgRow.model), apiFormat: cfgRow.api_format === 'anthropic' ? 'anthropic' : 'openai' };
     const modelName = String(cfgRow.name);
     const userId = req.user?.userId || '';
     const username = req.user?.username || '';

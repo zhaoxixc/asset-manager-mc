@@ -1,10 +1,12 @@
 import { Database } from '../database/index.js';
 
-/** OpenAI 兼容接口配置（DeepSeek/GLM/Kimi/Ollama等均适用） */
+/** OpenAI 兼容接口配置（DeepSeek/GLM/Ollama等）或 Anthropic 接口（Kimi Code/Claude） */
 export interface AiModelConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** 接口协议：openai（默认）或 anthropic */
+  apiFormat?: 'openai' | 'anthropic';
 }
 
 interface ToolCall {
@@ -67,8 +69,8 @@ export class AiService {
     },
   ];
 
-  /** 单次对话补全请求 */
-  private async completion(cfg: AiModelConfig, messages: ChatMessage[], withTools: boolean): Promise<ChatMessage> {
+  /** 单次对话补全请求（OpenAI 格式） */
+  private async completionOpenAI(cfg: AiModelConfig, messages: ChatMessage[], withTools: boolean): Promise<ChatMessage> {
     const url = cfg.baseUrl.replace(/\/+$/, '') + '/chat/completions';
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 60000);
@@ -90,6 +92,40 @@ export class AiService {
       }
       const data = await res.json();
       return data.choices?.[0]?.message || {};
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Anthropic Messages API（/v1/messages，x-api-key 头，content 为 block 数组） */
+  private async completionAnthropic(cfg: AiModelConfig, messages: unknown[], withTools: boolean): Promise<{ content: { type: string; text?: string; id?: string; name?: string; input?: Record<string, string> }[]; stop_reason: string }> {
+    const url = cfg.baseUrl.replace(/\/+$/, '') + '/v1/messages';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 60000);
+    const anthropicTools = this.tools.map((t) => ({
+      name: t.function.name,
+      description: t.function.description,
+      input_schema: t.function.parameters,
+    }));
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: cfg.model,
+          max_tokens: 4096,
+          system: SYSTEM_PROMPT,
+          messages,
+          temperature: 0.2,
+          ...(withTools ? { tools: anthropicTools } : {}),
+        }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        const text = (await res.text()).slice(0, 300);
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+      return await res.json();
     } finally {
       clearTimeout(timer);
     }
@@ -129,14 +165,17 @@ export class AiService {
     return { error: `未知工具: ${name}` };
   }
 
-  /** 对话主流程：带工具调用循环（最多3轮） */
+  /** 对话主流程：按协议格式分发（OpenAI 或 Anthropic），带工具调用循环（最多3轮） */
   async chat(question: string, cfg: AiModelConfig): Promise<string> {
+    if (cfg.apiFormat === 'anthropic') {
+      return this.chatAnthropic(question, cfg);
+    }
     const messages: ChatMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: question },
     ];
     for (let round = 0; round < 3; round++) {
-      const msg = await this.completion(cfg, messages, true);
+      const msg = await this.completionOpenAI(cfg, messages, true);
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         messages.push(msg);
         for (const tc of msg.tool_calls) {
@@ -149,35 +188,80 @@ export class AiService {
       }
       return msg.content || '（模型返回了空回复）';
     }
-    const final = await this.completion(cfg, [...messages, { role: 'user', content: '请基于以上查询结果直接给出最终回答。' }], false);
+    const final = await this.completionOpenAI(cfg, [...messages, { role: 'user', content: '请基于以上查询结果直接给出最终回答。' }], false);
     return final.content || '（模型返回了空回复）';
   }
 
-  /** 连接测试：发送短消息并限制输出长度，快速返回 */
+  /** Anthropic 格式对话主流程（工具调用循环） */
+  private async chatAnthropic(question: string, cfg: AiModelConfig): Promise<string> {
+    const messages: { role: string; content: unknown }[] = [
+      { role: 'user', content: [{ type: 'text', text: question }] },
+    ];
+    const textOf = (content: { type: string; text?: string }[]): string =>
+      content.filter((b) => b.type === 'text').map((b) => b.text || '').join('') || '';
+
+    for (let round = 0; round < 3; round++) {
+      const res = await this.completionAnthropic(cfg, messages, true);
+      const toolUses = res.content.filter((b) => b.type === 'tool_use');
+      if (toolUses.length === 0) {
+        return textOf(res.content) || '（模型返回了空回复）';
+      }
+      messages.push({ role: 'assistant', content: res.content });
+      const results = toolUses.map((tu) => ({
+        type: 'tool_result',
+        tool_use_id: tu.id,
+        content: JSON.stringify(this.runTool(tu.name || '', tu.input || {})).slice(0, 20000),
+      }));
+      messages.push({ role: 'user', content: results });
+    }
+    messages.push({ role: 'user', content: [{ type: 'text', text: '请基于以上查询结果直接给出最终回答。' }] });
+    const final = await this.completionAnthropic(cfg, messages, false);
+    return textOf(final.content) || '（模型返回了空回复）';
+  }
+
+  /** 连接测试：发送短消息并限制输出长度，快速返回（支持 OpenAI / Anthropic 两种协议） */
   async test(cfg: AiModelConfig): Promise<{ ok: boolean; latencyMs: number; reply?: string; error?: string }> {
     const start = Date.now();
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
     try {
-      const url = cfg.baseUrl.replace(/\/+$/, '') + '/chat/completions';
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
-        body: JSON.stringify({
-          model: cfg.model,
-          messages: [{ role: 'user', content: '请只回复四个字：连接成功' }],
-          max_tokens: 20,
-          temperature: 0,
-        }),
-        signal: ctrl.signal,
-      });
+      let res: globalThis.Response;
+      if (cfg.apiFormat === 'anthropic') {
+        res = await fetch(cfg.baseUrl.replace(/\/+$/, '') + '/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: cfg.model,
+            max_tokens: 20,
+            messages: [{ role: 'user', content: '请只回复四个字：连接成功' }],
+          }),
+          signal: ctrl.signal,
+        });
+      } else {
+        res = await fetch(cfg.baseUrl.replace(/\/+$/, '') + '/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
+          body: JSON.stringify({
+            model: cfg.model,
+            messages: [{ role: 'user', content: '请只回复四个字：连接成功' }],
+            max_tokens: 20,
+            temperature: 0,
+          }),
+          signal: ctrl.signal,
+        });
+      }
       clearTimeout(timer);
       if (!res.ok) {
         const text = (await res.text()).slice(0, 300);
         throw new Error(`HTTP ${res.status}: ${text}`);
       }
       const data = await res.json();
-      const reply = data.choices?.[0]?.message?.content || '';
+      let reply = '';
+      if (cfg.apiFormat === 'anthropic') {
+        reply = (data.content || []).filter((b: { type: string }) => b.type === 'text').map((b: { text?: string }) => b.text || '').join('');
+      } else {
+        reply = data.choices?.[0]?.message?.content || '';
+      }
       return { ok: true, latencyMs: Date.now() - start, reply: reply.slice(0, 50) };
     } catch (err) {
       clearTimeout(timer);

@@ -25,6 +25,7 @@ import {
   Checkbox,
   FormControlLabel,
   Chip,
+  MenuItem,
   Grid,
 } from '@mui/material';
 import {
@@ -79,6 +80,7 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
   // AI 模型配置
   interface AiModelConfig {
     id: string; name: string; baseUrl: string; model: string;
+    apiFormat?: 'openai' | 'anthropic';
     enabled: boolean; hasApiKey: boolean; apiKeyMasked: string;
   }
   const [aiModels, setAiModels] = useState<AiModelConfig[]>([]);
@@ -88,6 +90,7 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
   const [aiBaseUrl, setAiBaseUrl] = useState<string>('');
   const [aiApiKey, setAiApiKey] = useState<string>('');
   const [aiModel, setAiModel] = useState<string>('');
+  const [aiFormat, setAiFormat] = useState<'openai' | 'anthropic'>('openai');
   const [aiEnabled, setAiEnabled] = useState<boolean>(true);
   const [aiError, setAiError] = useState<string>('');
   const [aiSaving, setAiSaving] = useState<boolean>(false);
@@ -250,6 +253,7 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
     setAiBaseUrl(model?.baseUrl || '');
     setAiApiKey('');
     setAiModel(model?.model || '');
+    setAiFormat(model?.apiFormat || 'openai');
     setAiEnabled(model?.enabled ?? true);
     setAiError('');
     setAiDialogOpen(true);
@@ -260,10 +264,11 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
     if (!aiEditingId && !aiApiKey.trim()) { setAiError('API Key 不能为空'); return; }
     setAiSaving(true);
     try {
+      const payload = { name: aiName.trim(), baseUrl: aiBaseUrl.trim(), apiKey: aiApiKey.trim(), model: aiModel.trim(), enabled: aiEnabled, apiFormat: aiFormat };
       if (aiEditingId) {
-        await api.put(`/ai/models/${aiEditingId}`, { name: aiName.trim(), baseUrl: aiBaseUrl.trim(), apiKey: aiApiKey.trim(), model: aiModel.trim(), enabled: aiEnabled });
+        await api.put(`/ai/models/${aiEditingId}`, payload);
       } else {
-        await api.post('/ai/models', { name: aiName.trim(), baseUrl: aiBaseUrl.trim(), apiKey: aiApiKey.trim(), model: aiModel.trim(), enabled: aiEnabled });
+        await api.post('/ai/models', payload);
       }
       setAiDialogOpen(false);
       setSnackbar({ open: true, message: 'AI 模型配置已保存', severity: 'success' });
@@ -591,6 +596,7 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
                     <TableCell sx={{ fontWeight: 600 }}>名称</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>接口地址</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>模型</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }} align="center">协议</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="center">API Key</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="center">启用</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="center">操作</TableCell>
@@ -602,6 +608,9 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
                       <TableCell>{m.name}</TableCell>
                       <TableCell><Typography variant="caption" color="text.secondary">{m.baseUrl}</Typography></TableCell>
                       <TableCell>{m.model}</TableCell>
+                      <TableCell align="center">
+                        <Chip label={m.apiFormat === 'anthropic' ? 'Anthropic' : 'OpenAI'} size="small" sx={{ bgcolor: m.apiFormat === 'anthropic' ? '#f3e8fd' : '#e8f0fe', color: m.apiFormat === 'anthropic' ? '#8430ce' : '#1a73e8', fontSize: '0.7rem' }} />
+                      </TableCell>
                       <TableCell align="center"><Typography variant="caption" color="text.secondary">{m.apiKeyMasked}</Typography></TableCell>
                       <TableCell align="center">
                         <Chip label={m.enabled ? '启用' : '停用'} size="small" sx={{ bgcolor: m.enabled ? '#e6f4ea' : '#f1f3f4', color: m.enabled ? '#34a853' : '#5f6368' }} />
@@ -640,8 +649,12 @@ const SystemSettings: React.FC<SystemSettingsProps> = () => {
       <Dialog open={aiDialogOpen} onClose={() => setAiDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 600 }}>{aiEditingId ? '编辑 AI 模型' : '添加 AI 模型'}</DialogTitle>
         <DialogContent>
-          <TextField fullWidth label="名称" value={aiName} onChange={(e) => { setAiName(e.target.value); setAiError(''); }} placeholder="如：DeepSeek / 智谱GLM / 本地Ollama" size="small" sx={{ mt: 1, mb: 2 }} />
-          <TextField fullWidth label="接口地址（Base URL）" value={aiBaseUrl} onChange={(e) => { setAiBaseUrl(e.target.value); setAiError(''); }} placeholder="如：https://open.bigmodel.cn/api/coding/paas/v4 或 http://localhost:11434/v1" size="small" sx={{ mb: 2 }} helperText="OpenAI 兼容接口地址（不含 /chat/completions）；智谱Coding套餐用 /api/coding/paas/v4" />
+          <TextField fullWidth select label="接口协议" value={aiFormat} onChange={(e) => setAiFormat(e.target.value as 'openai' | 'anthropic')} size="small" sx={{ mt: 1, mb: 2 }} helperText="OpenAI：DeepSeek/GLM/本地网关等；Anthropic：Kimi Code 订阅、Claude 官方">
+            <MenuItem value="openai">OpenAI 兼容（默认）</MenuItem>
+            <MenuItem value="anthropic">Anthropic（Kimi Code 订阅 / Claude）</MenuItem>
+          </TextField>
+          <TextField fullWidth label="名称" value={aiName} onChange={(e) => { setAiName(e.target.value); setAiError(''); }} placeholder="如：DeepSeek / 智谱GLM / Kimi Coding / 本地网关" size="small" sx={{ mb: 2 }} />
+          <TextField fullWidth label="接口地址（Base URL）" value={aiBaseUrl} onChange={(e) => { setAiBaseUrl(e.target.value); setAiError(''); }} placeholder={aiFormat === 'anthropic' ? '如：https://api.moonshot.cn/anthropic' : '如：https://open.bigmodel.cn/api/coding/paas/v4 或 http://localhost:11434/v1'} size="small" sx={{ mb: 2 }} helperText={aiFormat === 'anthropic' ? 'Anthropic 接口地址（不含 /messages）' : 'OpenAI 兼容接口地址（不含 /chat/completions）；智谱Coding套餐用 /api/coding/paas/v4'} />
           <TextField fullWidth label="模型名称" value={aiModel} onChange={(e) => { setAiModel(e.target.value); setAiError(''); }} placeholder="如：deepseek-chat / glm-4 / qwen2.5:7b" size="small" sx={{ mb: 2 }} />
           <TextField fullWidth label={aiEditingId ? 'API Key（留空不修改）' : 'API Key'} type="password" value={aiApiKey} onChange={(e) => { setAiApiKey(e.target.value); setAiError(''); }} size="small" sx={{ mb: 2 }} />
           <FormControlLabel control={<Checkbox checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />} label="启用（所有用户可在 AI 助手页面对话）" />

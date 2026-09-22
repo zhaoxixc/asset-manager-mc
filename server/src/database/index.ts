@@ -147,6 +147,7 @@ export class Database {
       { table: 'users', column: 'cn_name', definition: "TEXT NOT NULL DEFAULT ''" },
       { table: 'assets', column: 'owner_username', definition: "TEXT NOT NULL DEFAULT ''" },
       { table: 'asset_statuses', column: 'sort_order', definition: 'INTEGER NOT NULL DEFAULT 0' },
+      { table: 'ai_models', column: 'api_format', definition: "TEXT NOT NULL DEFAULT 'openai'" },
       { table: 'code_prefixes', column: 'suffix', definition: "TEXT NOT NULL DEFAULT ''" },
       { table: 'code_prefixes', column: 'number_width', definition: 'INTEGER NOT NULL DEFAULT 4' },
       { table: 'assets', column: 'wired_macs', definition: "TEXT NOT NULL DEFAULT '[]'" },

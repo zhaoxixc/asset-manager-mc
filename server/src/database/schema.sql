@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS ai_models (
   base_url TEXT NOT NULL,
   api_key TEXT NOT NULL DEFAULT '',
   model TEXT NOT NULL,
+  api_format TEXT NOT NULL DEFAULT 'openai',
   enabled INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
