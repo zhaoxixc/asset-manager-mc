@@ -142,6 +142,11 @@ export class Database {
   private runMigrations(): void {
     const db = this.getDb();
     const migrations = [
+      { table: 'users', column: 'email', definition: "TEXT NOT NULL DEFAULT ''" },
+      { table: 'users', column: 'auth_source', definition: "TEXT NOT NULL DEFAULT 'local'" },
+      { table: 'users', column: 'cn_name', definition: "TEXT NOT NULL DEFAULT ''" },
+      { table: 'assets', column: 'owner_username', definition: "TEXT NOT NULL DEFAULT ''" },
+      { table: 'asset_statuses', column: 'sort_order', definition: 'INTEGER NOT NULL DEFAULT 0' },
       { table: 'code_prefixes', column: 'suffix', definition: "TEXT NOT NULL DEFAULT ''" },
       { table: 'code_prefixes', column: 'number_width', definition: 'INTEGER NOT NULL DEFAULT 4' },
       { table: 'assets', column: 'wired_macs', definition: "TEXT NOT NULL DEFAULT '[]'" },
@@ -160,12 +165,45 @@ export class Database {
         console.error(`[Migration] Error adding column ${m.column} to ${m.table}:`, err);
       }
     }
+    // 数据清洗：去除使用人/归属用户首尾空白（含制表符、换行、全角空格）
+    // 纯空白的名字会被清洗为空字符串（即"未填写"），避免在排行榜中聚合成幽灵行
+    try {
+      const ws = `' ' || char(9) || char(10) || char(13) || char(12288)`;
+      const dirty = this.get(`SELECT COUNT(*) AS c FROM assets WHERE "user" != TRIM("user", ${ws}) OR owner_username != TRIM(owner_username, ${ws})`);
+      if ((dirty?.c as number) > 0) {
+        db.run(`UPDATE assets SET "user" = TRIM("user", ${ws}), owner_username = TRIM(owner_username, ${ws}) WHERE "user" != TRIM("user", ${ws}) OR owner_username != TRIM(owner_username, ${ws})`);
+        console.log(`[Migration] Trimmed whitespace in user/owner_username for ${dirty?.c} rows`);
+      }
+    } catch (err) {
+      console.error('[Migration] whitespace cleanup error:', err);
+    }
+    // 资产状态排序初始化：新增 sort_order 列后（全部为0）按创建顺序赋初值，仅执行一次
+    try {
+      const totalRow = this.get('SELECT COUNT(*) AS c FROM asset_statuses');
+      const zeroRow = this.get('SELECT COUNT(*) AS c FROM asset_statuses WHERE sort_order = 0');
+      const total = (totalRow?.c as number) || 0;
+      if (total > 0 && zeroRow?.c === total) {
+        const rows = this.all('SELECT id FROM asset_statuses ORDER BY created_at, id');
+        rows.forEach((r, i) => this.run('UPDATE asset_statuses SET sort_order = ? WHERE id = ?', [i + 1, r.id]));
+        console.log(`[Migration] Initialized sort_order for ${total} asset statuses`);
+      }
+    } catch (err) {
+      console.error('[Migration] status sort init error:', err);
+    }
     // 确保 system_info 默认数据存在
     const infoDefaults = [
       { key: 'company_name', value: '' },
       { key: 'company_logo', value: '' },
       { key: 'audit_log_cleanup_enabled', value: 'false' },
       { key: 'audit_log_retention_days', value: '365' },
+      { key: 'smtp_enabled', value: 'false' },
+      { key: 'smtp_host', value: '' },
+      { key: 'smtp_port', value: '465' },
+      { key: 'smtp_secure', value: 'true' },
+      { key: 'smtp_user', value: '' },
+      { key: 'smtp_pass', value: '' },
+      { key: 'smtp_from', value: '' },
+      { key: 'smtp_from_name', value: '' },
     ];
     for (const d of infoDefaults) {
       try {

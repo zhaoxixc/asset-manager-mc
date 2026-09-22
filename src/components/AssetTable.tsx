@@ -45,9 +45,11 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
 interface AssetTableProps {
   globalSearch: string;
+  /** 从看板跳转时的预设筛选（使用人/部门/状态/全部） */
+  jumpFilter?: { field: 'user' | 'department' | 'status' | 'all'; value: string; nonce: number } | null;
 }
 
-const AssetTable: React.FC<AssetTableProps> = ({ globalSearch }) => {
+const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => {
   const assets = useAssetStore((s) => s.assets);
   const total = useAssetStore((s) => s.total);
   const departments = useDeptStore((s) => s.departments);
@@ -138,6 +140,24 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch }) => {
       setPage(0);
     }
   }, [globalSearch]);
+
+  // 应用从看板跳转带来的筛选（使用人/部门/状态精确匹配，all=查看全部并清空筛选）
+  useEffect(() => {
+    if (jumpFilter) {
+      if (jumpFilter.field === 'user') {
+        setFilter((prev) => ({ ...prev, keyword: '', user: jumpFilter.value }));
+        setSearchKeyword('');
+      } else if (jumpFilter.field === 'department') {
+        setFilter((prev) => ({ ...prev, keyword: '', user: '', department: jumpFilter.value }));
+      } else if (jumpFilter.field === 'status') {
+        setFilter((prev) => ({ ...prev, keyword: '', user: '', status: jumpFilter.value }));
+      } else {
+        setFilter((prev) => ({ ...defaultFilter, sortBy: prev.sortBy, sortOrder: prev.sortOrder }));
+        setSearchKeyword('');
+      }
+      setPage(0);
+    }
+  }, [jumpFilter?.nonce]);
 
   const getStatusColor = (status: string): { bg: string; color: string } => {
     const found = assetStatuses.find((s) => s.name === status);
@@ -245,6 +265,30 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch }) => {
               ),
             }}
           />
+          {filter.user && (
+            <Chip
+              label={`使用人: ${filter.user}`}
+              size="small"
+              onDelete={() => { setFilter((prev) => ({ ...prev, user: '' })); setPage(0); }}
+              sx={{ bgcolor: '#e8f0fe', color: '#1a73e8', fontWeight: 600 }}
+            />
+          )}
+          {filter.department && (
+            <Chip
+              label={`部门: ${filter.department}`}
+              size="small"
+              onDelete={() => { setFilter((prev) => ({ ...prev, department: '' })); setPage(0); }}
+              sx={{ bgcolor: '#e6f4ea', color: '#34a853', fontWeight: 600 }}
+            />
+          )}
+          {filter.status && (
+            <Chip
+              label={`状态: ${filter.status}`}
+              size="small"
+              onDelete={() => { setFilter((prev) => ({ ...prev, status: '' })); setPage(0); }}
+              sx={{ bgcolor: '#fef3e2', color: '#ff6d00', fontWeight: 600 }}
+            />
+          )}
           <Button
             size="small"
             startIcon={<FilterIcon />}
@@ -537,6 +581,8 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch }) => {
                       if (!isNaN(targetPage) && targetPage >= 0 && targetPage <= maxPage) {
                         setPage(targetPage);
                         setSelected([]);
+                      } else if (pageJump) {
+                        window.dispatchEvent(new CustomEvent('api-error', { detail: `请输入 1 - ${maxPage + 1} 之间的页码` }));
                       }
                       setPageJump('');
                     }

@@ -12,10 +12,22 @@ export function createAssetStatusRouter(db: Database): Router {
 
   router.use(authMiddleware);
 
-  /** GET /api/asset-statuses - 资产状态列表（含资产数量） */
+  /** GET /api/asset-statuses - 资产状态列表（含资产数量，按自定义排序） */
   router.get('/', (_req: Request, res: Response) => {
     const statuses = statusService.listWithCount();
     res.json(success(statuses));
+  });
+
+  /** POST /api/asset-statuses/reorder - 上移/下移排序 */
+  router.post('/reorder', (req: Request, res: Response) => {
+    const id = String(req.body.id || '');
+    const direction = req.body.direction === 'down' ? 'down' : 'up';
+    const ok = statusService.reorder(id, direction);
+    if (!ok) {
+      res.status(400).json(error(40000, '无法移动（已处于边界或状态不存在）'));
+      return;
+    }
+    res.json(success(statusService.listWithCount(), '排序已更新'));
   });
 
   /** POST /api/asset-statuses - 新增资产状态 */

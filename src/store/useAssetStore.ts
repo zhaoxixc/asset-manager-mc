@@ -62,6 +62,7 @@ const useAssetStore = create<AssetState>()((set, get) => ({
     try {
       const params: Record<string, unknown> = { page: p, pageSize: ps };
       if (f.keyword) params.keyword = f.keyword;
+      if (f.user) params.user = f.user;
       if (f.type) params.type = f.type;
       if (f.department) params.department = f.department;
       if (f.status) params.status = f.status;

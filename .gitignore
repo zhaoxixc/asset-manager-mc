@@ -1,1 +1,16 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+
+# 环境配置（含 LDAP 密码等敏感信息）
+server/.env
+
+# 运行时数据（数据库、上传文件、证书）
+server/data/
+*.db
+*.db.bak
+
+# 旧版部署文档
 deploy-guide.md

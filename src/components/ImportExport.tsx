@@ -45,11 +45,20 @@ const HEADER_MAP: Record<string, keyof AssetFormData> = {
   '资产型号': 'model',
   '使用部门': 'department',
   '使用人': 'user',
+  '归属用户': 'ownerUsername',
   '购入日期': 'purchaseDate',
   '资产状态': 'status',
   '存放位置': 'location',
+  '有线MAC': 'wiredMacs',
+  '无线MAC': 'wirelessMacs',
+  '主机名': 'hostnames',
   '备注': 'remark',
 };
+
+/** 多值字段（;或逗号/空格分隔 → 数组） */
+const ARRAY_FIELDS: (keyof AssetFormData)[] = ['wiredMacs', 'wirelessMacs', 'hostnames'];
+const parseArrayField = (value: string): string[] =>
+  String(value).split(/[;；,,\s]+/).map((s) => s.trim()).filter(Boolean);
 
 interface ImportExportProps {
   open: boolean;
@@ -58,7 +67,7 @@ interface ImportExportProps {
 
 /** 表单默认值 */
 const DEFAULT_FORM_DATA: AssetFormData = {
-  assetCode: '', name: '', type: '', model: '', department: '', user: '',
+  assetCode: '', name: '', type: '', model: '', department: '', user: '', ownerUsername: '',
   purchaseDate: '', status: '在用', location: '', remark: '',
   wiredMacs: [], wirelessMacs: [], hostnames: [],
 };
@@ -109,18 +118,26 @@ const ImportExport: React.FC<ImportExportProps> = ({ open, onClose }) => {
     }
   }, [open]);
 
+  /** 记录导出动作到审计日志 */
+  const logExport = (format: 'excel' | 'csv'): void => {
+    api.post('/audit-logs/export', { format, count: allAssets.length }).catch(() => { /* 审计失败不影响导出 */ });
+  };
+
   /** 导出为Excel */
   const handleExportExcel = () => {
+    logExport('excel');
     const exportData = allAssets.map((a) => ({
       '资产编号': a.assetCode, '资产名称': a.name, '资产类型': a.type, '资产型号': a.model,
-      '使用部门': a.department, '使用人': a.user, '购入日期': a.purchaseDate,
-      '资产状态': a.status, '存放位置': a.location, '备注': a.remark,
+      '使用部门': a.department, '使用人': a.user, '归属用户': a.ownerUsername || '',
+      '购入日期': a.purchaseDate, '资产状态': a.status, '存放位置': a.location,
+      '有线MAC': (a.wiredMacs || []).join(';'), '无线MAC': (a.wirelessMacs || []).join(';'), '主机名': (a.hostnames || []).join(';'),
+      '备注': a.remark,
       '创建时间': a.createdAt || '', '更新时间': a.updatedAt || '',
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '资产数据');
-    ws['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 8 }, { wch: 16 }, { wch: 20 }, { wch: 18 }, { wch: 18 }];
+    ws['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 16 }, { wch: 26 }, { wch: 26 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }];
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     saveAs(blob, `资产数据_${dayjs().format('YYYYMMDDHHmmss')}.xlsx`);
@@ -129,8 +146,14 @@ const ImportExport: React.FC<ImportExportProps> = ({ open, onClose }) => {
 
   /** 导出为CSV */
   const handleExportCSV = () => {
-    const headers = ['资产编号', '资产名称', '资产类型', '资产型号', '使用部门', '使用人', '购入日期', '资产状态', '存放位置', '备注'];
-    const rows = allAssets.map((a) => [a.assetCode, a.name, a.type, a.model, a.department, a.user, a.purchaseDate, a.status, a.location, a.remark]);
+    logExport('csv');
+    const headers = ['资产编号', '资产名称', '资产类型', '资产型号', '使用部门', '使用人', '归属用户', '购入日期', '资产状态', '存放位置', '有线MAC', '无线MAC', '主机名', '备注', '创建时间', '更新时间'];
+    const rows = allAssets.map((a) => [
+      a.assetCode, a.name, a.type, a.model, a.department, a.user, a.ownerUsername || '',
+      a.purchaseDate, a.status, a.location,
+      (a.wiredMacs || []).join(';'), (a.wirelessMacs || []).join(';'), (a.hostnames || []).join(';'),
+      a.remark, a.createdAt || '', a.updatedAt || '',
+    ]);
     const escapeCsvField = (value: string): string => `"${value.replace(/"/g, '""')}"`;
     const bom = '\uFEFF';
     const csvContent = bom + [headers.join(','), ...rows.map((r) => r.map(escapeCsvField).join(','))].join('\n');
@@ -160,12 +183,12 @@ const ImportExport: React.FC<ImportExportProps> = ({ open, onClose }) => {
 
         const assetDataList: AssetFormData[] = jsonData.map((row) => {
           const formData: AssetFormData = {
-            assetCode: '', name: '', type: '', model: '', department: '', user: '',
+            assetCode: '', name: '', type: '', model: '', department: '', user: '', ownerUsername: '',
             purchaseDate: dayjs().format('YYYY-MM-DD'), status: '在用', location: '', remark: '',
             wiredMacs: [], wirelessMacs: [], hostnames: [],
           };
           Object.entries(HEADER_MAP).forEach(([header, field]) => {
-            const value = row[header] || '';
+            const value = row[header];
             if (field === 'type') {
               // 检查值是否在有效类型列表中
               const typeNames = assetTypes.map((t) => t.name);
@@ -173,8 +196,10 @@ const ImportExport: React.FC<ImportExportProps> = ({ open, onClose }) => {
             } else if (field === 'status') {
               const statusNames = assetStatuses.map((s) => s.name);
               formData.status = statusNames.includes(value) ? value : (statusNames.length > 0 ? statusNames[0] : '在用');
+            } else if (ARRAY_FIELDS.includes(field)) {
+              (formData as unknown as Record<string, string[]>)[field] = parseArrayField(String(value || ''));
             } else {
-              (formData as unknown as Record<string, string>)[field] = String(value);
+              (formData as unknown as Record<string, string>)[field] = String(value || '');
             }
           });
           return formData;
@@ -222,7 +247,7 @@ const ImportExport: React.FC<ImportExportProps> = ({ open, onClose }) => {
             {canImport ? (
               <>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  从 Excel 或 CSV 文件导入资产数据。文件表头应包含：资产编号、资产名称、资产类型、资产型号、使用部门、使用人、购入日期、资产状态、存放位置、备注。
+                  从 Excel 或 CSV 文件导入资产数据。文件表头应包含：资产编号、资产名称、资产类型、资产型号、使用部门、归属用户、购入日期、资产状态、存放位置、有线MAC、无线MAC、主机名、备注（MAC/主机名多个值用分号分隔）。"归属用户"留空时将按使用人姓名自动匹配登录账号。
                 </Typography>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   资产类型可选值：{assetTypes.map((t) => t.name).join('、')}；资产状态可选值：{assetStatuses.map((s) => s.name).join('、')}

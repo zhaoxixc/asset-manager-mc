@@ -15,10 +15,10 @@ import {
   Typography,
   IconButton,
   Chip,
+  Autocomplete,
 } from '@mui/material';
 import { Add as AddIcon, Close as CloseIcon } from '@mui/icons-material';
 import useAssetStore from '../store/useAssetStore';
-import useDeptStore from '../store/useDeptStore';
 import { Asset, AssetFormData, AssetTypeItem, AssetStatusItem, CodePrefixItem } from '../types';
 import api from '../services/api';
 import dayjs from 'dayjs';
@@ -93,11 +93,12 @@ const MultiValueField: React.FC<{
 const AssetForm: React.FC<AssetFormProps> = ({ open, editingAsset, onClose }) => {
   const addAsset = useAssetStore((s) => s.addAsset);
   const updateAsset = useAssetStore((s) => s.updateAsset);
-  const departments = useDeptStore((s) => s.departments);
 
   const [assetTypes, setAssetTypes] = useState<AssetTypeItem[]>([]);
   const [assetStatuses, setAssetStatuses] = useState<AssetStatusItem[]>([]);
   const [codePrefixes, setCodePrefixes] = useState<CodePrefixItem[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [userOptions, setUserOptions] = useState<{ username: string; displayName: string }[]>([]);
 
   const [autoGenerateCode, setAutoGenerateCode] = useState<boolean>(!editingAsset);
   const [formData, setFormData] = useState<AssetFormData>({
@@ -107,6 +108,7 @@ const AssetForm: React.FC<AssetFormProps> = ({ open, editingAsset, onClose }) =>
     model: '',
     department: '',
     user: '',
+    ownerUsername: '',
     purchaseDate: '',
     status: '在用',
     location: '',
@@ -124,6 +126,9 @@ const AssetForm: React.FC<AssetFormProps> = ({ open, editingAsset, onClose }) =>
       api.get('/asset-types').then((res) => { setAssetTypes(res.data.data || []); }).catch(() => { setAssetTypes([]); });
       api.get('/asset-statuses').then((res) => { setAssetStatuses(res.data.data || []); }).catch(() => { setAssetStatuses([]); });
       api.get('/code-prefixes').then((res) => { setCodePrefixes(res.data.data || []); }).catch(() => { setCodePrefixes([]); });
+      api.get('/users/options').then((res) => { setUserOptions(res.data.data || []); }).catch(() => { setUserOptions([]); });
+      // 部门实时拉取，确保其他会话新增的部门立即可选
+      api.get('/departments').then((res) => { setDepartments(res.data.data || []); }).catch(() => { setDepartments([]); });
     }
   }, [open]);
 
@@ -136,6 +141,7 @@ const AssetForm: React.FC<AssetFormProps> = ({ open, editingAsset, onClose }) =>
         model: editingAsset.model,
         department: editingAsset.department,
         user: editingAsset.user,
+        ownerUsername: editingAsset.ownerUsername || '',
         purchaseDate: editingAsset.purchaseDate,
         status: editingAsset.status,
         location: editingAsset.location,
@@ -153,6 +159,7 @@ const AssetForm: React.FC<AssetFormProps> = ({ open, editingAsset, onClose }) =>
         model: '',
         department: '',
         user: '',
+        ownerUsername: '',
         purchaseDate: '',
         status: assetStatuses.length > 0 ? assetStatuses[0].name : '在用',
         location: '',
@@ -174,7 +181,9 @@ const AssetForm: React.FC<AssetFormProps> = ({ open, editingAsset, onClose }) =>
   }, [assetStatuses, editingAsset]);
 
   // 计算当前部门对应的编号预览（仅供展示，不调用API递增计数器）
-  const selectedPrefix = codePrefixes.find((p) => p.department === formData.department);
+  // 匹配优先级：部门精确匹配 → 部门为空的全局默认配置 → ZC兜底
+  const selectedPrefix = codePrefixes.find((p) => p.department === formData.department)
+    || codePrefixes.find((p) => !p.department);
   const previewCode = autoGenerateCode && formData.department
     ? `${selectedPrefix ? selectedPrefix.prefix : 'ZC'}${selectedPrefix?.suffix || ''}${'X'.repeat(selectedPrefix?.numberWidth || 4)}`
     : '';
@@ -316,12 +325,43 @@ const AssetForm: React.FC<AssetFormProps> = ({ open, editingAsset, onClose }) =>
             </TextField>
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="使用人"
-              value={formData.user}
-              onChange={(e) => handleChange('user', e.target.value)}
-              size="small"
+            <Autocomplete
+              freeSolo
+              options={userOptions}
+              getOptionLabel={(option) => (typeof option === 'string' ? option : option.displayName)}
+              value={formData.ownerUsername
+                ? (userOptions.find((o) => o.username === formData.ownerUsername) || { username: formData.ownerUsername, displayName: formData.user })
+                : (formData.user || null)}
+              inputValue={formData.user}
+              onChange={(_e, newValue) => {
+                if (newValue && typeof newValue !== 'string') {
+                  // 从下拉选中用户：使用人存中文名，同时记录登录名用于精确关联
+                  setFormData((prev) => ({ ...prev, user: newValue.displayName, ownerUsername: newValue.username }));
+                } else {
+                  // 自由输入（无账号人员）：仅记录使用人名
+                  setFormData((prev) => ({ ...prev, user: newValue || '', ownerUsername: '' }));
+                }
+              }}
+              onInputChange={(_e, newInput) => {
+                setFormData((prev) => (prev.user === newInput ? prev : { ...prev, user: newInput, ownerUsername: '' }));
+              }}
+              renderOption={(props, option) => (
+                <Box component="li" {...props} key={option.username}>
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{option.displayName}</Typography>
+                    <Typography variant="caption" color="text.secondary">{option.username}</Typography>
+                  </Box>
+                </Box>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  fullWidth
+                  label="使用人"
+                  helperText="输入中文姓名搜索，选中后自动关联登录用户；也可直接输入"
+                  size="small"
+                />
+              )}
             />
           </Grid>
           <Grid item xs={12} sm={6}>

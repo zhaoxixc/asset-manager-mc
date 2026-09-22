@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE,
   password TEXT NOT NULL,
   real_name TEXT NOT NULL,
+  cn_name TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  auth_source TEXT NOT NULL DEFAULT 'local',
   role TEXT NOT NULL DEFAULT 'user',
   status TEXT NOT NULL DEFAULT 'active',
   created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -22,6 +25,7 @@ CREATE TABLE IF NOT EXISTS assets (
   model TEXT NOT NULL DEFAULT '',
   department TEXT NOT NULL DEFAULT '',
   "user" TEXT NOT NULL DEFAULT '',
+  owner_username TEXT NOT NULL DEFAULT '',
   purchase_date TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT '在用',
   location TEXT NOT NULL DEFAULT '',
@@ -112,6 +116,7 @@ CREATE TABLE IF NOT EXISTS asset_statuses (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   color TEXT NOT NULL DEFAULT '#757575',
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
@@ -130,6 +135,18 @@ CREATE TABLE IF NOT EXISTS code_prefixes (
 );
 CREATE INDEX IF NOT EXISTS idx_code_prefixes_prefix ON code_prefixes(prefix);
 
+-- 邮件发送记录表
+CREATE TABLE IF NOT EXISTS mail_logs (
+  id TEXT PRIMARY KEY,
+  to_email TEXT NOT NULL,
+  username TEXT NOT NULL DEFAULT '',
+  asset_count INTEGER NOT NULL DEFAULT 0,
+  subject TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'sent',
+  error TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
 -- 系统信息表（存储企业名称、Logo等全局配置）
 CREATE TABLE IF NOT EXISTS system_info (
   key TEXT PRIMARY KEY,
@@ -142,6 +159,14 @@ INSERT OR IGNORE INTO system_info (key, value) VALUES ('company_name', '');
 INSERT OR IGNORE INTO system_info (key, value) VALUES ('company_logo', '');
 INSERT OR IGNORE INTO system_info (key, value) VALUES ('audit_log_cleanup_enabled', 'false');
 INSERT OR IGNORE INTO system_info (key, value) VALUES ('audit_log_retention_days', '365');
+INSERT OR IGNORE INTO system_info (key, value) VALUES ('smtp_enabled', 'false');
+INSERT OR IGNORE INTO system_info (key, value) VALUES ('smtp_host', '');
+INSERT OR IGNORE INTO system_info (key, value) VALUES ('smtp_port', '465');
+INSERT OR IGNORE INTO system_info (key, value) VALUES ('smtp_secure', 'true');
+INSERT OR IGNORE INTO system_info (key, value) VALUES ('smtp_user', '');
+INSERT OR IGNORE INTO system_info (key, value) VALUES ('smtp_pass', '');
+INSERT OR IGNORE INTO system_info (key, value) VALUES ('smtp_from', '');
+INSERT OR IGNORE INTO system_info (key, value) VALUES ('smtp_from_name', '');
 
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_assets_code ON assets(asset_code);

@@ -105,8 +105,14 @@ api.interceptors.response.use(
       // 静默处理，由组件层显示错误信息
     }
 
-    // 网络错误
+    // 网络错误：GET请求静默重试一次（应对网络瞬断、服务重启窗口），重试仍失败才提示
     if (!error.response) {
+      const config = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+      if (config?.method?.toLowerCase() === 'get' && !config._retry) {
+        config._retry = true;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return api(config);
+      }
       window.dispatchEvent(new CustomEvent('api-error', { detail: '网络连接失败，请检查网络' }));
     }
 

@@ -19,6 +19,7 @@ export function createAssetRouter(db: Database): Router {
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = parseInt(req.query.pageSize as string) || 10;
     const keyword = req.query.keyword as string | undefined;
+    const user = req.query.user as string | undefined;
     const type = req.query.type as string | undefined;
     const department = req.query.department as string | undefined;
     const status = req.query.status as string | undefined;
@@ -27,7 +28,7 @@ export function createAssetRouter(db: Database): Router {
     const sortOrder = req.query.sortOrder as string | undefined;
 
     const result = assetService.list({
-      page, pageSize, keyword, type, department, status, location, sortBy, sortOrder,
+      page, pageSize, keyword, user, type, department, status, location, sortBy, sortOrder,
     });
 
     res.json(paginate(result.items, result.total, page, pageSize));
@@ -36,13 +37,14 @@ export function createAssetRouter(db: Database): Router {
   /** GET /api/assets/export - 导出全部资产（无分页） */
   router.get('/export', (req: Request, res: Response) => {
     const keyword = req.query.keyword as string | undefined;
+    const user = req.query.user as string | undefined;
     const type = req.query.type as string | undefined;
     const department = req.query.department as string | undefined;
     const status = req.query.status as string | undefined;
     const location = req.query.location as string | undefined;
     const sortBy = req.query.sortBy as string | undefined;
     const sortOrder = req.query.sortOrder as string | undefined;
-    const items = assetService.listAll({ keyword, type, department, status, location, sortBy, sortOrder });
+    const items = assetService.listAll({ keyword, user, type, department, status, location, sortBy, sortOrder });
     res.json(success(items));
   });
 

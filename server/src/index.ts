@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import { config } from './config/index.js';
 import { Database } from './database/index.js';
 import { seedDatabase } from './database/seed.js';
@@ -6,9 +6,6 @@ import { createApp } from './app.js';
 
 /** 应用启动入口 */
 async function main(): Promise<void> {
-  // 加载环境变量
-  dotenv.config();
-
   // 初始化数据库
   const db = Database.getInstance(config.dbPath);
   await db.initialize();

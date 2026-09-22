@@ -96,6 +96,7 @@ interface LayoutProps {
 /** 主布局组件 */
 const Layout: React.FC<LayoutProps> = ({ currentPage, onPageChange }) => {
   const [globalSearch, setGlobalSearch] = useState<string>('');
+  const [assetJump, setAssetJump] = useState<{ field: 'user' | 'department' | 'status' | 'all'; value: string; nonce: number } | null>(null);
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [changePasswordOpen, setChangePasswordOpen] = useState<boolean>(false);
@@ -136,8 +137,26 @@ const Layout: React.FC<LayoutProps> = ({ currentPage, onPageChange }) => {
     }
   };
 
+  /** 看板等页面跳转到资产列表并按使用人/部门/状态筛选 */
+  const handleNavigateToAssets = (field: 'user' | 'department' | 'status' | 'all', value: string) => {
+    setAssetJump({ field, value, nonce: Date.now() });
+    onPageChange('assets');
+  };
+
+  /** 侧栏菜单切换（离开资产页时清除跳转筛选） */
+  const handleNavPageChange = (page: string) => {
+    if (page !== 'assets') setAssetJump(null);
+    onPageChange(page);
+    setMobileOpen(false);
+  };
+
   /** 渲染页面内容 */
   const renderPage = () => {
+    if (currentPage === 'dashboard') {
+      return <Dashboard globalSearch={globalSearch} onNavigateToAssets={handleNavigateToAssets} />;
+    }    if (currentPage === 'assets') {
+      return <AssetTable globalSearch={globalSearch} jumpFilter={assetJump} />;
+    }
     const Component = pageComponents[currentPage];
     if (!Component) return <Dashboard globalSearch={globalSearch} />;
     return <Component globalSearch={globalSearch} />;
@@ -193,8 +212,7 @@ const Layout: React.FC<LayoutProps> = ({ currentPage, onPageChange }) => {
             <ListItemButton
               selected={currentPage === item.key}
               onClick={() => {
-                onPageChange(item.key);
-                setMobileOpen(false);
+                handleNavPageChange(item.key);
               }}
               sx={{
                 borderRadius: 1.5,
@@ -236,7 +254,7 @@ const Layout: React.FC<LayoutProps> = ({ currentPage, onPageChange }) => {
       )}
       <Box sx={{ px: 2, pb: 2, textAlign: 'center' }}>
         <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.76rem', color: 'text.secondary', letterSpacing: 0.15 }}>
-          v6.03 · {companyName || '企业版'}
+          v6.06 · {companyName || '企业版'}
         </Typography>
       </Box>
     </Box>

@@ -58,6 +58,7 @@ const AuditLogPage: React.FC<AuditLogPageProps> = () => {
   const [rowsPerPage, setRowsPerPage] = useState<number>(20);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionFilter, setActionFilter] = useState<string>('');
+  const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [usernameFilter, setUsernameFilter] = useState<string>('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -86,6 +87,13 @@ const AuditLogPage: React.FC<AuditLogPageProps> = () => {
       setLoading(false);
     }
   }, [page, rowsPerPage, actionFilter, usernameFilter, startDate, endDate]);
+
+  // 加载实际存在的操作类型（动态，按出现次数降序）
+  useEffect(() => {
+    api.get('/audit-logs/actions').then((res) => {
+      setActionOptions(res.data.data || []);
+    }).catch(() => setActionOptions([]));
+  }, []);
 
   useEffect(() => {
     fetchLogs();
@@ -144,25 +152,12 @@ const AuditLogPage: React.FC<AuditLogPageProps> = () => {
             label="操作类型"
             value={actionFilter}
             onChange={(e) => { setActionFilter(e.target.value); setPage(0); }}
-            sx={{ minWidth: 140 }}
+            sx={{ minWidth: 160 }}
           >
             <MenuItem value="">全部</MenuItem>
-            <MenuItem value="登录">登录</MenuItem>
-            <MenuItem value="登出">登出</MenuItem>
-            <MenuItem value="新增资产">新增资产</MenuItem>
-            <MenuItem value="编辑资产">编辑资产</MenuItem>
-            <MenuItem value="删除资产">删除资产</MenuItem>
-            <MenuItem value="导入资产">导入资产</MenuItem>
-            <MenuItem value="新增部门">新增部门</MenuItem>
-            <MenuItem value="编辑部门">编辑部门</MenuItem>
-            <MenuItem value="删除部门">删除部门</MenuItem>
-            <MenuItem value="新增用户">新增用户</MenuItem>
-            <MenuItem value="编辑用户">编辑用户</MenuItem>
-            <MenuItem value="删除用户">删除用户</MenuItem>
-            <MenuItem value="重置密码">重置密码</MenuItem>
-            <MenuItem value="修改密码">修改密码</MenuItem>
-            <MenuItem value="导出备份">导出备份</MenuItem>
-            <MenuItem value="恢复备份">恢复备份</MenuItem>
+            {actionOptions.map((action) => (
+              <MenuItem key={action} value={action}>{action}</MenuItem>
+            ))}
           </TextField>
           <TextField
             size="small"

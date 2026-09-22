@@ -16,12 +16,12 @@ if [ -z "$PORT" ]; then
 fi
 
 write_common_locations() {
-    cat <<'NGINX'
+    cat <<'NGINX' | sed "s/__API_PORT__/${API_PORT:-3001}/g"
     root /usr/share/nginx/html;
     index index.html;
 
     location /api/ {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:__API_PORT__;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

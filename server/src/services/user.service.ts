@@ -23,25 +23,25 @@ export class UserService {
     const camelRow = toCamelCase(row) as Record<string, unknown>; delete camelRow.password; return camelRow;
   }
 
-  create(data: { username: string; password: string; realName: string; role: string; status: string }, userId: string, username: string, ip: string): Record<string, unknown> | { error: string } {
+  create(data: { username: string; password: string; realName: string; cnName?: string; email?: string; role: string; status: string }, userId: string, username: string, ip: string): Record<string, unknown> | { error: string } {
     const existing = this.db.get('SELECT id FROM users WHERE username = ?', [data.username]);
     if (existing) return { error: '用户名已存在' };
     const id = uuidv4(); const hashedPassword = hashPassword(data.password || '123456'); const now = getNow();
-    this.db.run('INSERT INTO users (id, username, password, real_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [id, data.username, hashedPassword, data.realName, data.role, data.status || 'active', now, now]);
+    this.db.run('INSERT INTO users (id, username, password, real_name, cn_name, email, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [id, data.username, hashedPassword, data.realName, data.cnName || '', data.email || '', data.role, data.status || 'active', now, now]);
     this.auditLogService.create({ userId, username, action: '新增用户', resource: 'users', detail: `新增用户：${data.username}(${data.realName})`, ip });
     this.db.scheduleSave();
     return this.getById(id)!;
   }
 
-  update(id: string, data: { realName?: string; role?: string; status?: string; password?: string }, userId: string, username: string, ip: string): Record<string, unknown> | null {
+  update(id: string, data: { realName?: string; cnName?: string; email?: string; role?: string; status?: string; password?: string }, userId: string, username: string, ip: string): Record<string, unknown> | null {
     const existing = this.getById(id);
     if (!existing) return null;
     const now = getNow();
     if (data.password) {
       const hashedPassword = hashPassword(data.password);
-      this.db.run('UPDATE users SET real_name = ?, role = ?, status = ?, password = ?, updated_at = ? WHERE id = ?', [data.realName ?? existing.realName, data.role ?? existing.role, data.status ?? existing.status, hashedPassword, now, id]);
+      this.db.run('UPDATE users SET real_name = ?, cn_name = ?, email = ?, role = ?, status = ?, password = ?, updated_at = ? WHERE id = ?', [data.realName ?? existing.realName, data.cnName ?? existing.cnName, data.email ?? existing.email, data.role ?? existing.role, data.status ?? existing.status, hashedPassword, now, id]);
     } else {
-      this.db.run('UPDATE users SET real_name = ?, role = ?, status = ?, updated_at = ? WHERE id = ?', [data.realName ?? existing.realName, data.role ?? existing.role, data.status ?? existing.status, now, id]);
+      this.db.run('UPDATE users SET real_name = ?, cn_name = ?, email = ?, role = ?, status = ?, updated_at = ? WHERE id = ?', [data.realName ?? existing.realName, data.cnName ?? existing.cnName, data.email ?? existing.email, data.role ?? existing.role, data.status ?? existing.status, now, id]);
     }
     this.auditLogService.create({ userId, username, action: '编辑用户', resource: 'users', detail: `编辑用户：${existing.username}`, ip });
     this.db.scheduleSave();

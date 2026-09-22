@@ -18,6 +18,8 @@ import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { loginLimiter, apiLimiter } from './middleware/rate-limit.js';
 import { AuditLogService } from './services/audit-log.service.js';
+import { LdapService } from './services/ldap.service.js';
+import { config } from './config/index.js';
 
 /**
  * 创建并配置Express应用
@@ -61,8 +63,11 @@ export function createApp(db: Database): express.Application {
   // 健康检查（无需鉴权）
   app.use('/api', healthRouter);
 
+  // LDAP服务（启用时创建，认证与用户同步共用）
+  const ldapService = config.ldap.enabled ? new LdapService() : null;
+
   // 认证路由（内部自行处理哪些需要鉴权）
-  app.use('/api/auth', createAuthRouter(db));
+  app.use('/api/auth', createAuthRouter(db, ldapService));
 
   // 业务路由（路由内部自行添加authMiddleware）
   app.use('/api/assets', createAssetRouter(db));
@@ -73,7 +78,7 @@ export function createApp(db: Database): express.Application {
   app.use('/api/system-info', createSystemInfoRouter(db));
   app.use('/api/inventory', createInventoryRouter(db));
   app.use('/api/change-logs', createChangeLogRouter(db));
-  app.use('/api/users', createUserRouter(db));
+  app.use('/api/users', createUserRouter(db, ldapService));
   app.use('/api/dashboard', createDashboardRouter(db));
   app.use('/api/backup', createBackupRouter(db));
   app.use('/api/audit-logs', createAuditLogRouter(db));

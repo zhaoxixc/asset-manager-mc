@@ -24,6 +24,8 @@ export interface Asset {
   model: string;
   department: string;
   user: string;
+  /** 归属登录用户名（使用人下拉选中用户时写入，精确关联用） */
+  ownerUsername?: string;
   purchaseDate: string;
   status: string;
   location: string;
@@ -124,6 +126,8 @@ export interface AssetFormData {
   model: string;
   department: string;
   user: string;
+  /** 归属登录用户名（下拉选中用户时写入，自由输入时为空） */
+  ownerUsername: string;
   purchaseDate: string;
   status: string;
   location: string;
@@ -136,6 +140,7 @@ export interface AssetFormData {
 /** 筛选条件 */
 export interface FilterCondition {
   keyword: string;
+  user: string;
   type: string;
   department: string;
   status: string;
@@ -169,6 +174,10 @@ export interface User {
   id: string;
   username: string;
   realName: string;
+  /** 中文姓名（使用人名，本地维护，LDAP同步不覆盖） */
+  cnName: string;
+  email: string;
+  authSource: 'local' | 'ldap';
   role: Role;
   status: UserStatus;
   createdAt: string;
@@ -178,6 +187,7 @@ export interface User {
 /** 默认筛选条件 */
 export const defaultFilter: FilterCondition = {
   keyword: '',
+  user: '',
   type: '',
   department: '',
   status: '',

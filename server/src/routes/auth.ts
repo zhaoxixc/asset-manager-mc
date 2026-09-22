@@ -13,11 +13,10 @@ import dayjs from 'dayjs';
 
 function getNow(): string { return dayjs().format('YYYY-MM-DD HH:mm:ss'); }
 
-export function createAuthRouter(db: Database): Router {
+export function createAuthRouter(db: Database, ldapService: LdapService | null): Router {
   const router = Router();
   const auditLogService = new AuditLogService(db);
   const authService = new AuthService(db, auditLogService);
-  const ldapService = config.ldap.enabled ? new LdapService() : null;
 
   /** POST /api/auth/login - 登录（无需鉴权） */
   router.post('/login', async (req: Request, res: Response) => {
@@ -29,23 +28,16 @@ export function createAuthRouter(db: Database): Router {
     }
 
     const ip = req.clientIp || req.ip || req.socket.remoteAddress || 'unknown';
+    const name = username.trim();
 
-    // 先尝试本地用户登录
-    const localResult = authService.login({ username: username.trim(), password, ip });
-
-    if (localResult.success) {
-      res.json(success(localResult.data));
-      return;
-    }
-
-    // 本地登录失败，如果LDAP启用则尝试LDAP
+    // LDAP权威模式：启用LDAP时优先走LDAP认证
     if (ldapService && config.ldap.enabled) {
       try {
-        const ldapUser = await ldapService.authenticate(username.trim(), password);
+        const ldapUser = await ldapService.authenticate(name, password);
 
         if (ldapUser) {
           // LDAP认证成功，检查本地是否已有此用户
-          let localUser = db.get('SELECT * FROM users WHERE username = ? AND status = ?', [username.trim(), 'active']) as Record<string, unknown> | undefined;
+          let localUser = db.get('SELECT * FROM users WHERE username = ? AND status = ?', [name, 'active']) as Record<string, unknown> | undefined;
 
           if (!localUser) {
             // 自动创建本地用户，默认角色为 LDAP 配置的 defaultRole
@@ -54,22 +46,27 @@ export function createAuthRouter(db: Database): Router {
             const defaultRole = config.ldap.defaultRole;
             const now = getNow();
             db.run(
-              'INSERT INTO users (id, username, password, real_name, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-              [id, username.trim(), hashedPassword, ldapUser.displayName, defaultRole, 'active', now, now]
+              'INSERT INTO users (id, username, password, real_name, email, auth_source, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [id, name, hashedPassword, ldapUser.displayName, ldapUser.email || '', 'ldap', defaultRole, 'active', now, now]
             );
             db.scheduleSave();
             localUser = db.get('SELECT * FROM users WHERE id = ?', [id]) as Record<string, unknown>;
-            auditLogService.create({ userId: id, username: username.trim(), action: 'LDAP自动注册', resource: 'auth', detail: `LDAP用户首次登录，自动创建本地账号，角色：${defaultRole}`, ip });
+            auditLogService.create({ userId: id, username: name, action: 'LDAP自动注册', resource: 'auth', detail: `LDAP用户首次登录，自动创建本地账号，角色：${defaultRole}`, ip });
           }
 
           if (localUser) {
-            // 更新本地用户密码（保持同步）和真实姓名
+            // 更新本地用户密码（保持同步）、真实姓名、邮箱，并标记为LDAP账号
             const now = getNow();
-            db.run('UPDATE users SET password = ?, real_name = ?, updated_at = ? WHERE id = ?',
-              [hashPassword(password), ldapUser.displayName, now, localUser.id as string]);
+            if (ldapUser.email) {
+              db.run('UPDATE users SET password = ?, real_name = ?, email = ?, auth_source = ?, updated_at = ? WHERE id = ?',
+                [hashPassword(password), ldapUser.displayName, ldapUser.email, 'ldap', now, localUser.id as string]);
+            } else {
+              db.run('UPDATE users SET password = ?, real_name = ?, auth_source = ?, updated_at = ? WHERE id = ?',
+                [hashPassword(password), ldapUser.displayName, 'ldap', now, localUser.id as string]);
+            }
             db.scheduleSave();
 
-// LDAP认证成功：生成JWT
+            // LDAP认证成功：生成JWT
             const jwtPayload = {
               userId: localUser.id as string,
               username: localUser.username as string,
@@ -79,7 +76,7 @@ export function createAuthRouter(db: Database): Router {
             const refreshToken = jwt.sign({ ...jwtPayload, type: 'refresh' }, config.jwtSecret, { expiresIn: config.refreshTokenExpiry } as SignOptions);
 
             // 清除可能的登录锁定
-            db.run('DELETE FROM login_locks WHERE username = ?', [username.trim()]);
+            db.run('DELETE FROM login_locks WHERE username = ?', [name]);
 
             auditLogService.create({ userId: localUser.id as string, username: localUser.username as string, action: 'LDAP登录', resource: 'auth', detail: '用户通过LDAP登录成功', ip });
 
@@ -99,6 +96,14 @@ export function createAuthRouter(db: Database): Router {
       } catch (ldapErr) {
         console.error('[LDAP] Authentication error:', (ldapErr as Error).message);
       }
+    }
+
+    // LDAP未命中或未启用，回退本地登录
+    const localResult = authService.login({ username: name, password, ip });
+
+    if (localResult.success) {
+      res.json(success(localResult.data));
+      return;
     }
 
     // 所有方式都失败
@@ -155,6 +160,13 @@ export function createAuthRouter(db: Database): Router {
 
     const userId = req.user?.userId || '';
     const ip = req.clientIp || req.ip || req.socket.remoteAddress || 'unknown';
+
+    // LDAP账号密码由企业统一认证管理，禁止本地修改
+    const authUser = db.get('SELECT auth_source FROM users WHERE id = ?', [userId]);
+    if (authUser?.auth_source === 'ldap') {
+      res.status(400).json(error(40000, 'LDAP账号密码由企业统一认证（域控）管理，请通过企业渠道修改密码'));
+      return;
+    }
 
     const result = authService.changePassword({
       userId,

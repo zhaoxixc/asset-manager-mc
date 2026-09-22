@@ -4,7 +4,7 @@ import {
   TableContainer, TableHead, TableRow, IconButton, Button, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, Chip, Tooltip, Snackbar, Alert, CircularProgress,
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon } from '@mui/icons-material';
 import useAuthStore from '../store/useAuthStore';
 import api from '../services/api';
 import { AssetStatusItem } from '../types';
@@ -73,6 +73,16 @@ const AssetStatusManager: React.FC<AssetStatusManagerProps> = () => {
     }
   };
 
+  // 上移/下移排序
+  const handleReorder = async (id: string, direction: 'up' | 'down') => {
+    try {
+      await api.post('/asset-statuses/reorder', { id, direction });
+      fetchStatuses();
+    } catch {
+      setSnackbar({ open: true, message: '排序失败', severity: 'error' });
+    }
+  };
+
   const handleSubmit = async () => {
     if (!sName.trim()) { setSError('名称不能为空'); return; }
     const duplicate = statuses.some((s) => s.name === sName.trim() && s.id !== editingId);
@@ -112,6 +122,7 @@ const AssetStatusManager: React.FC<AssetStatusManagerProps> = () => {
             <Table size="small">
               <TableHead>
                 <TableRow>
+                  <TableCell sx={{ fontWeight: 600, width: 70 }} align="center">排序</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>状态名称</TableCell>
                   <TableCell sx={{ fontWeight: 600 }} align="center">颜色预览</TableCell>
                   <TableCell sx={{ fontWeight: 600 }} align="center">资产数量</TableCell>
@@ -121,8 +132,14 @@ const AssetStatusManager: React.FC<AssetStatusManagerProps> = () => {
               </TableHead>
               <TableBody>
                 {statuses.length > 0 ? (
-                  statuses.map((status) => (
+                  statuses.map((status, index) => (
                     <TableRow key={status.id} hover>
+                      <TableCell align="center">
+                        <Box sx={{ display: 'inline-flex', gap: 0.5 }}>
+                          <Tooltip title={canEdit ? '上移' : '您没有操作权限'}><span><IconButton size="small" disabled={!canEdit || index === 0} onClick={() => handleReorder(status.id, 'up')}><ArrowUpwardIcon fontSize="small" /></IconButton></span></Tooltip>
+                          <Tooltip title={canEdit ? '下移' : '您没有操作权限'}><span><IconButton size="small" disabled={!canEdit || index === statuses.length - 1} onClick={() => handleReorder(status.id, 'down')}><ArrowDownwardIcon fontSize="small" /></IconButton></span></Tooltip>
+                        </Box>
+                      </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>{status.name}</Typography>
@@ -145,7 +162,7 @@ const AssetStatusManager: React.FC<AssetStatusManagerProps> = () => {
                     </TableRow>
                   ))
                 ) : (
-                  <TableRow><TableCell colSpan={5} align="center" sx={{ py: 6 }}><Typography color="text.secondary">暂无资产状态数据</Typography></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} align="center" sx={{ py: 6 }}><Typography color="text.secondary">暂无资产状态数据</Typography></TableCell></TableRow>
                 )}
               </TableBody>
             </Table>

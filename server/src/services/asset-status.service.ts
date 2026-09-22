@@ -13,14 +13,29 @@ export class AssetStatusService {
   constructor(db: Database, auditLogService: AuditLogService) { this.db = db; this.auditLogService = auditLogService; }
 
   list(): AssetStatusRow[] {
-    return this.db.all('SELECT * FROM asset_statuses ORDER BY created_at ASC').map((r) => toCamelCase(r) as AssetStatusRow);
+    return this.db.all('SELECT * FROM asset_statuses ORDER BY sort_order, created_at ASC').map((r) => toCamelCase(r) as AssetStatusRow);
   }
 
   listWithCount(): (AssetStatusRow & { assetCount: number })[] {
-    const statuses = this.db.all('SELECT * FROM asset_statuses ORDER BY created_at ASC').map((r) => toCamelCase(r) as AssetStatusRow);
+    const statuses = this.db.all('SELECT * FROM asset_statuses ORDER BY sort_order, created_at ASC').map((r) => toCamelCase(r) as AssetStatusRow);
     const counts = this.db.all('SELECT status, COUNT(*) as count FROM assets GROUP BY status');
     const countMap = new Map(counts.map((c) => [c.status as string, c.count as number]));
     return statuses.map((s) => ({ ...s, assetCount: countMap.get(s.name) || 0 }));
+  }
+
+  /** 上移/下移排序：与相邻状态交换 sort_order */
+  reorder(id: string, direction: 'up' | 'down'): boolean {
+    const list = this.db.all('SELECT id, sort_order FROM asset_statuses ORDER BY sort_order, created_at');
+    const idx = list.findIndex((r) => r.id === id);
+    if (idx === -1) return false;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= list.length) return false;
+    const a = list[idx];
+    const b = list[swapIdx];
+    this.db.run('UPDATE asset_statuses SET sort_order = ?, updated_at = ? WHERE id = ?', [b.sort_order || swapIdx + 1, getNow(), a.id]);
+    this.db.run('UPDATE asset_statuses SET sort_order = ?, updated_at = ? WHERE id = ?', [a.sort_order || idx + 1, getNow(), b.id]);
+    this.db.scheduleSave();
+    return true;
   }
 
   getById(id: string): AssetStatusRow | null {
@@ -33,7 +48,9 @@ export class AssetStatusService {
     if (existing) return { error: '资产状态名称已存在' };
     const id = uuidv4();
     const now = getNow();
-    this.db.run('INSERT INTO asset_statuses (id, name, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [id, name, color || '#757575', now, now]);
+    const maxRow = this.db.get('SELECT COALESCE(MAX(sort_order), 0) AS m FROM asset_statuses') as Record<string, unknown> | undefined;
+    const sortOrder = ((maxRow?.m as number) || 0) + 1;
+    this.db.run('INSERT INTO asset_statuses (id, name, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', [id, name, color || '#757575', sortOrder, now, now]);
     this.auditLogService.create({ userId, username, action: '新增资产状态', resource: 'asset-statuses', detail: `新增资产状态：${name}`, ip });
     this.db.scheduleSave();
     return this.getById(id)!;
