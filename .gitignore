@@ -9,6 +9,8 @@ server/.env
 
 # 运行时数据（数据库、上传文件、证书）
 server/data/
+server/dist/
+server/proc/
 *.db
 *.db.bak
 
