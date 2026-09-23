@@ -12,9 +12,11 @@ import {
   Alert,
   InputAdornment,
   IconButton,
+  Tooltip,
 } from '@mui/material';
-import { Send as SendIcon, SmartToy as AiIcon, Person as PersonIcon } from '@mui/icons-material';
+import { Send as SendIcon, SmartToy as AiIcon, Person as PersonIcon, DeleteSweep as ClearIcon } from '@mui/icons-material';
 import api from '../services/api';
+import useAuthStore from '../store/useAuthStore';
 
 interface AiModelOption {
   id: string;
@@ -28,26 +30,56 @@ interface ChatMsg {
   error?: boolean;
 }
 
+const CHAT_STORAGE_KEY = 'ai-assistant-chat-v1';
+const MODEL_STORAGE_KEY = 'ai-assistant-model-v1';
+
+function loadStoredChat(): { messages: ChatMsg[]; modelId: string } {
+  try {
+    const messages = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) || '[]');
+    const modelId = localStorage.getItem(MODEL_STORAGE_KEY) || '';
+    if (Array.isArray(messages) && messages.length > 0) return { messages, modelId };
+  } catch { /* 忽略损坏的本地数据 */ }
+  return { messages: [], modelId: '' };
+}
+
+function saveStoredChat(messages: ChatMsg[], modelId: string): void {
+  try {
+    // 只保留最近 50 条，避免 localStorage 膨胀
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages.slice(-50)));
+    localStorage.setItem(MODEL_STORAGE_KEY, modelId);
+  } catch { /* 存储满时静默忽略 */ }
+}
+
 interface AiAssistantProps {
   globalSearch: string;
 }
 
-/** AI 资产助手：通过对话查询资产信息 */
+/** AI 资产助手：通过对话查询资产信息（仅管理员及以上可用） */
 const AIAssistant: React.FC<AiAssistantProps> = () => {
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const canUse = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const [models, setModels] = useState<AiModelOption[]>([]);
-  const [modelId, setModelId] = useState<string>('');
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: 'assistant', content: '你好！我是 AI 资产助手，可以帮你查询资产相关信息，例如：\n· 「查一下张三名下有哪些设备」\n· 「各种状态的资产有多少」\n· 「MC-IT2604001 这个资产的信息」' },
-  ]);
+  const stored = loadStoredChat();
+  const [messages, setMessages] = useState<ChatMsg[]>(() => {
+    return stored.messages.length > 0
+      ? stored.messages
+      : [{ role: 'assistant', content: '你好！我是 AI 资产助手，可以帮你查询资产相关信息，例如：\n· 「查一下张三名下有哪些设备」\n· 「各种状态的资产有多少」\n· 「MC-IT2604001 这个资产的信息」' }];
+  });
+  const [modelId, setModelId] = useState<string>(stored.modelId);
   const [input, setInput] = useState<string>('');
   const [sending, setSending] = useState<boolean>(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // 对话与模型选择持久化（切换页面/刷新不丢失）
+  useEffect(() => {
+    saveStoredChat(messages, modelId);
+  }, [messages, modelId]);
 
   useEffect(() => {
     api.get('/ai/models/enabled').then((res) => {
-      const list = res.data.data || [];
+      const list: AiModelOption[] = res.data.data || [];
       setModels(list);
-      if (list.length > 0) setModelId(list[0].id);
+      // 优先使用持久化的选择，仅当其无效时回退到第一个可用模型
+      setModelId((prev) => (prev && list.some((m) => m.id === prev) ? prev : list[0]?.id || ''));
     }).catch(() => setModels([]));
   }, []);
 
@@ -81,8 +113,17 @@ const AIAssistant: React.FC<AiAssistantProps> = () => {
     }
   };
 
+  if (!canUse) {
+    return (
+      <Alert severity="error">
+        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>无权使用</Typography>
+        AI 助手仅对超级管理员和管理员开放，请联系管理员。
+      </Alert>
+    );
+  }
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 190px)', minHeight: 480 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 480 }}>
       {/* 工具栏 */}
       <Card elevation={0} sx={{ border: '1px solid #e8eaed', borderRadius: 2, mb: 2 }}>
         <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1.5, '&:last-child': { pb: 1.5 }, gap: 1, flexWrap: 'wrap' }}>
@@ -90,19 +131,34 @@ const AIAssistant: React.FC<AiAssistantProps> = () => {
             <AiIcon color="primary" />
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>AI 资产助手</Typography>
           </Box>
-          <TextField
-            select
-            size="small"
-            label="使用的模型"
-            value={modelId}
-            onChange={(e) => setModelId(e.target.value)}
-            disabled={models.length === 0}
-            sx={{ minWidth: 220 }}
-          >
-            {models.map((m) => (
-              <MenuItem key={m.id} value={m.id}>{m.name}（{m.model}）</MenuItem>
-            ))}
-          </TextField>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TextField
+              select
+              size="small"
+              label="使用的模型"
+              value={modelId}
+              onChange={(e) => setModelId(e.target.value)}
+              disabled={models.length === 0}
+              sx={{ minWidth: 220 }}
+            >
+              {models.map((m) => (
+                <MenuItem key={m.id} value={m.id}>{m.name}（{m.model}）</MenuItem>
+              ))}
+            </TextField>
+            <Tooltip title="清空对话记录">
+              <IconButton
+                onClick={() => {
+                  if (messages.length <= 1 || window.confirm('确定要清空当前对话记录吗？')) {
+                    const welcome: ChatMsg = { role: 'assistant', content: '你好！我是 AI 资产助手，可以帮你查询资产相关信息，例如：\n· 「查一下张三名下有哪些设备」\n· 「各种状态的资产有多少」\n· 「MC-IT2604001 这个资产的信息」' };
+                    setMessages([welcome]);
+                    saveStoredChat([welcome], modelId);
+                  }
+                }}
+              >
+                <ClearIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </CardContent>
       </Card>
 
@@ -151,7 +207,8 @@ const AIAssistant: React.FC<AiAssistantProps> = () => {
               <TextField
                 fullWidth
                 multiline
-                maxRows={4}
+                minRows={2}
+                maxRows={6}
                 placeholder="输入问题，如：查一下张三名下的设备 / 各状态的资产有多少"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

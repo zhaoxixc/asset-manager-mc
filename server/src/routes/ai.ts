@@ -13,8 +13,8 @@ export function createAiRouter(db: Database): Router {
 
   router.use(authMiddleware);
 
-  /** GET /api/ai/models/enabled - 已启用的模型列表（所有登录用户，用于对话时选择） */
-  router.get('/models/enabled', (_req: Request, res: Response) => {
+  /** GET /api/ai/models/enabled - 已启用的模型列表（仅管理员及以上，用于对话时选择） */
+  router.get('/models/enabled', roleMiddleware(['super_admin', 'admin']), (_req: Request, res: Response) => {
     const rows = db.all('SELECT id, name, model FROM ai_models WHERE enabled = 1 ORDER BY created_at ASC');
     res.json(success(rows));
   });
@@ -112,8 +112,8 @@ export function createAiRouter(db: Database): Router {
     res.json(success(result, result.ok ? `连接成功（${result.latencyMs}ms）` : undefined));
   });
 
-  /** POST /api/ai/chat - AI 对话（查询资产信息） */
-  router.post('/chat', async (req: Request, res: Response) => {
+  /** POST /api/ai/chat - AI 对话（仅管理员及以上） */
+  router.post('/chat', roleMiddleware(['super_admin', 'admin']), async (req: Request, res: Response) => {
     const message = String(req.body.message || '').trim();
     const modelId = String(req.body.modelId || '');
     if (!message) {

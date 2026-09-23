@@ -81,7 +81,6 @@ export class AiService {
         body: JSON.stringify({
           model: cfg.model,
           messages,
-          temperature: 0.2,
           ...(withTools ? { tools: this.tools, tool_choice: 'auto' } : {}),
         }),
         signal: ctrl.signal,
@@ -97,7 +96,13 @@ export class AiService {
     }
   }
 
-  /** Anthropic Messages API（/v1/messages，x-api-key 头，content 为 block 数组） */
+  /** Anthropic Messages API（/v1/messages，x-api-key + Bearer 双认证头以兼容 Kimi 等网关，content 为 block 数组） */
+  private static ANTHROPIC_HEADERS = (apiKey: string) => ({
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    Authorization: `Bearer ${apiKey}`,
+    'anthropic-version': '2023-06-01',
+  });
   private async completionAnthropic(cfg: AiModelConfig, messages: unknown[], withTools: boolean): Promise<{ content: { type: string; text?: string; id?: string; name?: string; input?: Record<string, string> }[]; stop_reason: string }> {
     const url = cfg.baseUrl.replace(/\/+$/, '') + '/v1/messages';
     const ctrl = new AbortController();
@@ -110,13 +115,12 @@ export class AiService {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' },
+        headers: AiService.ANTHROPIC_HEADERS(cfg.apiKey),
         body: JSON.stringify({
           model: cfg.model,
           max_tokens: 4096,
           system: SYSTEM_PROMPT,
           messages,
-          temperature: 0.2,
           ...(withTools ? { tools: anthropicTools } : {}),
         }),
         signal: ctrl.signal,
@@ -229,7 +233,7 @@ export class AiService {
       if (cfg.apiFormat === 'anthropic') {
         res = await fetch(cfg.baseUrl.replace(/\/+$/, '') + '/v1/messages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' },
+          headers: AiService.ANTHROPIC_HEADERS(cfg.apiKey),
           body: JSON.stringify({
             model: cfg.model,
             max_tokens: 20,
@@ -245,7 +249,6 @@ export class AiService {
             model: cfg.model,
             messages: [{ role: 'user', content: '请只回复四个字：连接成功' }],
             max_tokens: 20,
-            temperature: 0,
           }),
           signal: ctrl.signal,
         });

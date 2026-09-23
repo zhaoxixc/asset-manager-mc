@@ -67,7 +67,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { key: 'dashboard', label: '统计看板', icon: <DashboardIcon /> },
-  { key: 'ai', label: 'AI 助手', icon: <AiIcon /> },
+  { key: 'ai', label: 'AI 助手', icon: <AiIcon />, requiredRole: [Role.SUPER_ADMIN, Role.ADMIN] },
   { key: 'assets', label: '资产列表', icon: <AssetIcon /> },
   { key: 'departments', label: '部门管理', icon: <DeptIcon />, requiredRole: [Role.SUPER_ADMIN, Role.ADMIN] },
   { key: 'asset-types', label: '资产类型', icon: <CategoryIcon />, requiredRole: [Role.SUPER_ADMIN, Role.ADMIN] },
