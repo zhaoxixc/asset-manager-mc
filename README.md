@@ -2,12 +2,13 @@
 
 > 版本：**v6.06** ｜ 企业内部设备全生命周期管理平台
 
-基于 React + Express + SQLite 的全栈资产管理系统，支持设备的录入、领用、归还、盘点、报废等全流程管理，提供可视化仪表盘、使用人设备数量排行、邮件提醒、LDAP 域账号集成、审计追踪与自动清理。
+基于 React + Express + SQLite 的全栈资产管理系统，支持设备的录入、领用、归还、盘点、报废等全流程管理，提供可视化仪表盘、使用人设备数量排行、AI 智能助手（对话查询资产）、邮件提醒、LDAP 域账号集成、审计追踪与自动清理。
 
 ---
 
 ## 功能特性
 
+- **AI 智能助手** — 自然语言对话查询资产（仅管理员及以上）：支持 DeepSeek、智谱 GLM、Kimi Code、本地 Ollama 等模型，兼容 OpenAI / Anthropic 双协议，AI 通过工具调用查询真实数据
 - **仪表盘** — 资产状态统计卡片（可点击跳转）、部门/类型分布图表、使用人设备数量排行（分页/搜索/一键关联/发送邮件提醒）、近期变动
 - **资产管理** — 增删改查、批量删除、Excel/CSV 全字段导入导出（含 MAC/主机名，导入自动关联使用人）、按部门自动生成资产编号
 - **使用人关联体系** — 资产“使用人”与登录账号双向关联（表单下拉精确绑定 + 中文姓名自动匹配），支撑邮件提醒
@@ -36,6 +37,7 @@
 | 数据库 | SQLite（sql.js WASM，无需原生模块） |
 | 认证 | JWT + bcryptjs + LDAP (ldapjs) |
 | 邮件 | nodemailer |
+| AI 集成 | OpenAI 兼容接口 + Anthropic 协议（原生 fetch，无 SDK 依赖） |
 | 容器化 | Docker 多阶段构建（Nginx + Node） |
 
 ---
@@ -63,13 +65,12 @@ npm run dev             # 监听 http://localhost:5173，自动代理 /api 到 3
 # 构建镜像
 docker build -t asset-manager:6.06 .
 
-# 启动（参考 start_v6.06_ldap.sh）
+# 启动（参考 start_v6.06_ldap.sh；JWT_SECRET 等全部配置在 server/.env 中）
 docker run -d \
   --name asset-manager-v6.06 \
   --network host \
   -v /opt/asset-manager/data:/app/server/data \
   --env-file server/.env \
-  -e JWT_SECRET=***REMOVED*** \
   -e PORT=8092 \
   --restart unless-stopped \
   asset-manager:6.06
@@ -95,7 +96,7 @@ docker run -d \
 
 ```
 ├── src/                          # 前端源码（页面组件、状态管理、类型）
-│   ├── components/               # 各功能页面
+│   ├── components/               # 各功能页面（含 AIAssistant、PaginationFooter）
 │   ├── store/                    # Zustand 状态
 │   ├── services/api.ts           # Axios 实例（Token 刷新、错误重试）
 │   └── types/index.ts            # 类型定义
@@ -105,8 +106,8 @@ docker run -d \
 │   │   ├── config/               # 环境变量配置
 │   │   ├── database/             # SQLite schema、迁移、种子数据
 │   │   ├── middleware/           # JWT 认证、角色鉴权、限流
-│   │   ├── services/             # 业务逻辑（资产/用户/LDAP/邮件/备份等）
-│   │   └── routes/               # API 路由
+│   │   ├── services/             # 业务逻辑（资产/用户/LDAP/邮件/AI/备份等）
+│   │   └── routes/               # API 路由（含 /ai 对话与模型配置）
 │   ├── data/                     # 数据库文件（容器内挂载到数据卷）
 │   └── .env.example              # 环境变量模板（含 LDAP/SMTP 说明）
 ├── docker/start.sh               # 容器入口（Nginx + 后端）
