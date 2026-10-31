@@ -245,12 +245,12 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
     { key: 'user', label: '使用人', width: 70, sortable: true },
     { key: 'status', label: '状态', width: 70, sortable: true },
     { key: 'location', label: '位置', width: 85, sortable: true },
-    { key: 'remark', label: '备注', width: 140 },
     { key: 'wiredMacs', label: '有线MAC', width: 110, sortable: true },
     { key: 'wirelessMacs', label: '无线MAC', width: 110, sortable: true },
     { key: 'hostnames', label: '主机名', width: 90 },
+    { key: 'remark', label: '备注', width: 140 },
   ];
-  const COLUMN_VIEW_KEY = 'asset-table-view-v1';
+  const COLUMN_VIEW_KEY = 'asset-table-view-v2';
 
   // 列视图配置状态：顺序 / 隐藏 / 宽度（按浏览器 localStorage 持久化）
   const [columnOrder, setColumnOrder] = useState<string[]>(ALL_COLUMNS.map((c) => c.key));
