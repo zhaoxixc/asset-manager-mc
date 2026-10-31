@@ -237,11 +237,11 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
   const ALL_COLUMNS: ColumnDef[] = [
     { key: 'assetCode', label: '资产编号', width: 130, sortable: true },
     { key: 'name', label: '资产名称', width: 120, sortable: true },
-    { key: 'type', label: '类型', width: 75 },
-    { key: 'department', label: '部门', width: 80 },
-    { key: 'user', label: '使用人', width: 70 },
-    { key: 'status', label: '状态', width: 70 },
-    { key: 'location', label: '位置', width: 85 },
+    { key: 'type', label: '类型', width: 75, sortable: true },
+    { key: 'department', label: '部门', width: 80, sortable: true },
+    { key: 'user', label: '使用人', width: 70, sortable: true },
+    { key: 'status', label: '状态', width: 70, sortable: true },
+    { key: 'location', label: '位置', width: 85, sortable: true },
     { key: 'remark', label: '备注', width: 140 },
     { key: 'wiredMacs', label: '有线MAC', width: 110 },
     { key: 'wirelessMacs', label: '无线MAC', width: 110 },
@@ -608,10 +608,13 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
                           onMouseDown={(e) => startResize(e, col.key, columnWidths[col.key] || col.width)}
                           onClick={(e) => e.stopPropagation()}
                           title="拖动调整列宽"
-                          style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 5, cursor: 'col-resize', userSelect: 'none' }}
-                        />
+                          style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 7, cursor: 'col-resize', userSelect: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                          <span style={{ width: 2, height: '60%', backgroundColor: '#c3c8cf', borderRadius: 1 }} />
+                        </span>
                       </TableCell>
                     ))}
+                    <TableCell sx={{ width: 120, fontWeight: 600 }}>操作</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -636,12 +639,35 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
                               {renderCellContent(col.key, asset)}
                             </TableCell>
                           ))}
+                          <TableCell>
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <Tooltip title="查看">
+                                <IconButton size="small" onClick={() => handleView(asset)} color="primary">
+                                  <ViewIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={!canEdit ? '您没有操作权限' : '编辑'}>
+                                <span>
+                                  <IconButton size="small" onClick={() => handleEdit(asset)} color="primary" disabled={!canEdit}>
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              <Tooltip title={!canDelete ? '您没有操作权限' : '删除'}>
+                                <span>
+                                  <IconButton size="small" onClick={() => handleDelete(asset)} color="error" disabled={!canDelete}>
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            </Box>
+                          </TableCell>
                         </TableRow>
                       );
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={visibleColumns.length + 1} align="center" sx={{ py: 6 }}>
+                      <TableCell colSpan={visibleColumns.length + 2} align="center" sx={{ py: 6 }}>
                         <Typography color="text.secondary">暂无资产数据</Typography>
                       </TableCell>
                     </TableRow>

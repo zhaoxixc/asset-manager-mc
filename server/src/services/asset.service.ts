@@ -74,6 +74,8 @@ export class AssetService {
       'assetCode': 'asset_code', 'purchaseDate': 'purchase_date',
       'name': 'name', 'created_at': 'created_at', 'updated_at': 'updated_at',
       'asset_code': 'asset_code', 'purchase_date': 'purchase_date',
+      'type': 'type', 'department': 'department', 'status': 'status',
+      'location': 'location', 'user': '"user"',
     };
     const allowedSortFields = Object.values(sortFieldMap);
     const mappedSortBy = sortFieldMap[params.sortBy || ''] || 'created_at';
@@ -236,6 +238,8 @@ export class AssetService {
       'assetCode': 'asset_code', 'purchaseDate': 'purchase_date',
       'name': 'name', 'created_at': 'created_at', 'updated_at': 'updated_at',
       'asset_code': 'asset_code', 'purchase_date': 'purchase_date',
+      'type': 'type', 'department': 'department', 'status': 'status',
+      'location': 'location', 'user': '"user"',
     };
     const allowedSortFields = Object.values(sortFieldMap);
     const mappedSortBy = sortFieldMap[params?.sortBy || ''] || 'created_at';
