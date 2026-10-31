@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Card,
@@ -21,6 +21,9 @@ import {
   Checkbox,
   Tooltip,
   CircularProgress,
+  Popover,
+  FormControlLabel,
+  Divider,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -31,6 +34,7 @@ import {
   FilterList as FilterIcon,
   FileUpload as ImportIcon,
   Refresh as RefreshIcon,
+  ViewColumn as ViewColumnIcon,
 } from '@mui/icons-material';
 import useAssetStore from '../store/useAssetStore';
 import useDeptStore from '../store/useDeptStore';
@@ -57,7 +61,7 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
   const deleteAsset = useAssetStore((s) => s.deleteAsset);
   const batchDeleteAssets = useAssetStore((s) => s.batchDeleteAssets);
   const loading = useAssetStore((s) => s.loading);
-  const { hasPermission } = useAuthStore();
+  const { hasPermission, isSuperAdmin } = useAuthStore();
   const canCreate = hasPermission('create');
   const canEdit = hasPermission('edit');
   const canDelete = hasPermission('delete');
@@ -228,19 +232,155 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
     fetchAllLocations();
   };
 
-  const columns = [
-    { id: 'assetCode', label: '资产编号', minWidth: 130, sortable: true },
-    { id: 'name', label: '资产名称', minWidth: 120, sortable: true },
-    { id: 'type', label: '类型', minWidth: 75 },
-    { id: 'department', label: '部门', minWidth: 80 },
-    { id: 'user', label: '使用人', minWidth: 65 },
-    { id: 'status', label: '状态', minWidth: 65 },
-    { id: 'location', label: '位置', minWidth: 85 },
-    { id: 'wiredMacs', label: '有线MAC', minWidth: 110 },
-    { id: 'wirelessMacs', label: '无线MAC', minWidth: 110 },
-    { id: 'hostnames', label: '主机名', minWidth: 90 },
-    { id: 'actions', label: '操作', minWidth: 120 },
+  /** 可配置的数据列（勾选框与操作列固定，不参与配置）；备注列仅超级管理员可见 */
+  interface ColumnDef { key: string; label: string; width: number; sortable?: boolean }
+  const ALL_COLUMNS: ColumnDef[] = [
+    { key: 'assetCode', label: '资产编号', width: 130, sortable: true },
+    { key: 'name', label: '资产名称', width: 120, sortable: true },
+    { key: 'type', label: '类型', width: 75 },
+    { key: 'department', label: '部门', width: 80 },
+    { key: 'user', label: '使用人', width: 70 },
+    { key: 'status', label: '状态', width: 70 },
+    { key: 'location', label: '位置', width: 85 },
+    { key: 'remark', label: '备注', width: 140 },
+    { key: 'wiredMacs', label: '有线MAC', width: 110 },
+    { key: 'wirelessMacs', label: '无线MAC', width: 110 },
+    { key: 'hostnames', label: '主机名', width: 90 },
   ];
+  const COLUMN_VIEW_KEY = 'asset-table-view-v1';
+
+  // 列视图配置状态：顺序 / 隐藏 / 宽度（按浏览器 localStorage 持久化）
+  const [columnOrder, setColumnOrder] = useState<string[]>(ALL_COLUMNS.map((c) => c.key));
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [colSettingsAnchor, setColSettingsAnchor] = useState<null | HTMLElement>(null);
+  const dragColRef = useRef<string | null>(null);
+  const resizeRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
+  const viewLoadedRef = useRef<boolean>(false);
+
+  // 从 localStorage 恢复视图配置
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COLUMN_VIEW_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (Array.isArray(saved.order) && saved.order.length > 0) {
+          setColumnOrder(saved.order.filter((k: string) => ALL_COLUMNS.some((c) => c.key === k)));
+        }
+        if (Array.isArray(saved.hidden)) setHiddenColumns(saved.hidden.filter((k: string) => ALL_COLUMNS.some((c) => c.key === k)));
+        if (saved.widths && typeof saved.widths === 'object') setColumnWidths(saved.widths);
+      }
+    } catch { /* 忽略损坏的本地数据 */ }
+    viewLoadedRef.current = true;
+  }, []);
+
+  // 视图变化时持久化（非超管强制隐藏备注列）
+  useEffect(() => {
+    if (!viewLoadedRef.current) return;
+    const effHidden = isSuperAdmin() ? hiddenColumns : Array.from(new Set([...hiddenColumns, 'remark']));
+    localStorage.setItem(COLUMN_VIEW_KEY, JSON.stringify({ order: columnOrder, hidden: effHidden, widths: columnWidths }));
+  }, [columnOrder, hiddenColumns, columnWidths, isSuperAdmin]);
+
+  // 最终渲染的可见列（顺序 + 隐藏 + 权限过滤）
+  const visibleColumns = columnOrder
+    .map((key) => ALL_COLUMNS.find((c) => c.key === key))
+    .filter((c): c is ColumnDef => !!c)
+    .filter((c) => c.key !== 'remark' || isSuperAdmin())
+    .filter((c) => !hiddenColumns.includes(c.key));
+
+  // 拖拽表头：调整列顺序
+  const handleColumnReorder = (fromKey: string, toKey: string) => {
+    if (fromKey === toKey) return;
+    setColumnOrder((prev) => {
+      const fi = prev.indexOf(fromKey);
+      const ti = prev.indexOf(toKey);
+      if (fi === -1 || ti === -1) return prev;
+      const arr = [...prev];
+      arr.splice(fi, 1);
+      arr.splice(ti, 0, fromKey);
+      return arr;
+    });
+  };
+
+  // 表头边缘拖拽：调整列宽
+  const startResize = (e: React.MouseEvent, key: string, width: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = { key, startX: e.clientX, startW: width };
+  };
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const st = resizeRef.current;
+      if (!st) return;
+      const w = Math.max(50, st.startW + e.clientX - st.startX);
+      setColumnWidths((prev) => ({ ...prev, [st.key]: w }));
+    };
+    const onUp = () => { resizeRef.current = null; };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
+  const toggleColumnVisible = (key: string) => {
+    setHiddenColumns((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  };
+
+  const resetColumnView = () => {
+    setColumnOrder(ALL_COLUMNS.map((c) => c.key));
+    setHiddenColumns(isSuperAdmin() ? [] : ["remark"]);
+    setColumnWidths({});
+  };
+
+  /** 按列 key 渲染单元格内容 */
+  const renderCellContent = (key: string, asset: Asset) => {
+    switch (key) {
+      case 'assetCode':
+        return <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{asset.assetCode}</Typography>;
+      case 'name':
+        return <Typography variant="body2" sx={{ fontWeight: 500 }}>{asset.name}</Typography>;
+      case 'type':
+        return asset.type;
+      case 'department':
+        return asset.department || '-';
+      case 'user':
+        return asset.user || '-';
+      case 'status': {
+        const sc = getStatusColor(asset.status);
+        return <Chip label={asset.status} size="small" sx={{ bgcolor: sc.bg, color: sc.color, fontWeight: 600, fontSize: '0.75rem' }} />;
+      }
+      case 'location':
+        return asset.location || '-';
+      case 'remark':
+        return asset.remark ? (
+          <Tooltip title={asset.remark}>
+            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{asset.remark}</Typography>
+          </Tooltip>
+        ) : '-';
+      case 'wiredMacs':
+        return Array.isArray(asset.wiredMacs) && asset.wiredMacs.length > 0
+          ? asset.wiredMacs.map((m: string, i: number) => (
+              <Typography key={i} variant="caption" sx={{ display: 'block', fontFamily: 'monospace', fontSize: '0.7rem', lineHeight: 1.4 }}>{m}</Typography>
+            ))
+          : '-';
+      case 'wirelessMacs':
+        return Array.isArray(asset.wirelessMacs) && asset.wirelessMacs.length > 0
+          ? asset.wirelessMacs.map((m: string, i: number) => (
+              <Typography key={i} variant="caption" sx={{ display: 'block', fontFamily: 'monospace', fontSize: '0.7rem', lineHeight: 1.4 }}>{m}</Typography>
+            ))
+          : '-';
+      case 'hostnames':
+        return Array.isArray(asset.hostnames) && asset.hostnames.length > 0
+          ? asset.hostnames.map((h: string, i: number) => (
+              <Typography key={i} variant="caption" sx={{ display: 'block', fontSize: '0.75rem', lineHeight: 1.4 }}>{h}</Typography>
+            ))
+          : '-';
+      default:
+        return '-';
+    }
+  };
 
   return (
     <Box>
@@ -297,6 +437,14 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
             sx={{ textTransform: 'none' }}
           >
             筛选
+          </Button>
+          <Button
+            size="small"
+            startIcon={<ViewColumnIcon />}
+            onClick={(e) => setColSettingsAnchor(e.currentTarget)}
+            sx={{ textTransform: 'none' }}
+          >
+            列设置
           </Button>
           <IconButton size="small" onClick={handleRefresh} title="刷新">
             <RefreshIcon fontSize="small" />
@@ -422,32 +570,46 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
         ) : (
           <>
             <TableContainer>
-              <Table stickyHeader size="small">
+              <Table stickyHeader size="small" sx={{ tableLayout: 'fixed' }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell padding="checkbox">
+                    <TableCell padding="checkbox" sx={{ width: 42 }}>
                       <Checkbox
                         indeterminate={selected.length > 0 && selected.length < assets.length}
                         checked={assets.length > 0 && selected.length === assets.length}
                         onChange={handleSelectAll}
                       />
                     </TableCell>
-                    {columns.map((col) => (
+                    {visibleColumns.map((col) => (
                       <TableCell
-                        key={col.id}
-                        sx={{ minWidth: col.minWidth, fontWeight: 600 }}
+                        key={col.key}
+                        draggable
+                        onDragStart={() => { dragColRef.current = col.key; }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (dragColRef.current) handleColumnReorder(dragColRef.current, col.key);
+                          dragColRef.current = null;
+                        }}
+                        sx={{ width: columnWidths[col.key] || col.width, minWidth: 50, fontWeight: 600, position: 'relative' }}
                       >
                         {col.sortable ? (
                           <TableSortLabel
-                            active={filter.sortBy === col.id}
-                            direction={filter.sortBy === col.id ? filter.sortOrder : 'asc'}
-                            onClick={() => handleSort(col.id)}
+                            active={filter.sortBy === col.key}
+                            direction={filter.sortBy === col.key ? filter.sortOrder : 'asc'}
+                            onClick={() => handleSort(col.key)}
                           >
                             {col.label}
                           </TableSortLabel>
                         ) : (
-                          col.label
+                          <span style={{ userSelect: 'none' }}>{col.label}</span>
                         )}
+                        <span
+                          onMouseDown={(e) => startResize(e, col.key, columnWidths[col.key] || col.width)}
+                          onClick={(e) => e.stopPropagation()}
+                          title="拖动调整列宽"
+                          style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 5, cursor: 'col-resize', userSelect: 'none' }}
+                        />
                       </TableCell>
                     ))}
                   </TableRow>
@@ -456,7 +618,6 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
                   {assets.length > 0 ? (
                     assets.map((asset) => {
                       const isSelected = selected.includes(asset.id);
-                      const sc = getStatusColor(asset.status);
                       return (
                         <TableRow
                           key={asset.id}
@@ -470,82 +631,17 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
                               onChange={() => handleSelectRow(asset.id)}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                              {asset.assetCode}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {asset.name}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>{asset.type}</TableCell>
-                          <TableCell>{asset.department || '-'}</TableCell>
-                          <TableCell>{asset.user || '-'}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={asset.status}
-                              size="small"
-                              sx={{
-                                bgcolor: sc.bg,
-                                color: sc.color,
-                                fontWeight: 600,
-                                fontSize: '0.75rem',
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>{asset.location || '-'}</TableCell>
-                          <TableCell>
-                            {Array.isArray(asset.wiredMacs) && asset.wiredMacs.length > 0
-                              ? asset.wiredMacs.map((m: string, i: number) => (
-                                  <Typography key={i} variant="caption" sx={{ display: 'block', fontFamily: 'monospace', fontSize: '0.7rem', lineHeight: 1.4 }}>{m}</Typography>
-                                ))
-                              : '-'}
-                          </TableCell>
-                          <TableCell>
-                            {Array.isArray(asset.wirelessMacs) && asset.wirelessMacs.length > 0
-                              ? asset.wirelessMacs.map((m: string, i: number) => (
-                                  <Typography key={i} variant="caption" sx={{ display: 'block', fontFamily: 'monospace', fontSize: '0.7rem', lineHeight: 1.4 }}>{m}</Typography>
-                                ))
-                              : '-'}
-                          </TableCell>
-                          <TableCell>
-                            {Array.isArray(asset.hostnames) && asset.hostnames.length > 0
-                              ? asset.hostnames.map((h: string, i: number) => (
-                                  <Typography key={i} variant="caption" sx={{ display: 'block', fontSize: '0.75rem', lineHeight: 1.4 }}>{h}</Typography>
-                                ))
-                              : '-'}
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', gap: 0.5 }}>
-                              <Tooltip title="查看">
-                                <IconButton size="small" onClick={() => handleView(asset)} color="primary">
-                                  <ViewIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title={!canEdit ? '您没有操作权限' : '编辑'}>
-                                <span>
-                                  <IconButton size="small" onClick={() => handleEdit(asset)} color="primary" disabled={!canEdit}>
-                                    <EditIcon fontSize="small" />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                              <Tooltip title={!canDelete ? '您没有操作权限' : '删除'}>
-                                <span>
-                                  <IconButton size="small" onClick={() => handleDelete(asset)} color="error" disabled={!canDelete}>
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                            </Box>
-                          </TableCell>
+                          {visibleColumns.map((col) => (
+                            <TableCell key={col.key}>
+                              {renderCellContent(col.key, asset)}
+                            </TableCell>
+                          ))}
                         </TableRow>
                       );
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={columns.length + 1} align="center" sx={{ py: 6 }}>
+                      <TableCell colSpan={visibleColumns.length + 1} align="center" sx={{ py: 6 }}>
                         <Typography color="text.secondary">暂无资产数据</Typography>
                       </TableCell>
                     </TableRow>
@@ -620,6 +716,38 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
         open={importExportOpen}
         onClose={() => setImportExportOpen(false)}
       />
+
+      {/* 列设置弹窗：勾选显示列 */}
+      <Popover
+        open={!!colSettingsAnchor}
+        anchorEl={colSettingsAnchor}
+        onClose={() => setColSettingsAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <Box sx={{ p: 1.5, minWidth: 200 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+            自定义显示列（拖动表头可调整列顺序，拖动表头右缘可调列宽）
+          </Typography>
+          {ALL_COLUMNS.filter((c) => c.key !== 'remark' || isSuperAdmin()).map((c) => (
+            <FormControlLabel
+              key={c.key}
+              sx={{ display: 'flex', py: 0.25 }}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={!hiddenColumns.includes(c.key)}
+                  onChange={() => toggleColumnVisible(c.key)}
+                />
+              }
+              label={<Typography variant="body2">{c.label}</Typography>}
+            />
+          ))}
+          <Divider sx={{ my: 1 }} />
+          <Button size="small" onClick={resetColumnView} sx={{ textTransform: 'none' }}>
+            恢复默认
+          </Button>
+        </Box>
+      </Popover>
     </Box>
   );
 };

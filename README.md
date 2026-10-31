@@ -1,6 +1,6 @@
 # 企业设备资产管理系统 (Enterprise Asset Manager)
 
-> 版本：**v6.06** ｜ 企业内部设备全生命周期管理平台
+> 版本：**v6.06** ｜ 镜像：`registry.cn-hangzhou.aliyuncs.com/wuxidocker/asset-manager:6.06_ai` ｜ 企业内部设备全生命周期管理平台
 
 基于 React + Express + SQLite 的全栈资产管理系统，支持设备的录入、领用、归还、盘点、报废等全流程管理，提供可视化仪表盘、使用人设备数量排行、AI 智能助手（对话查询资产）、邮件提醒、LDAP 域账号集成、审计追踪与自动清理。
 
@@ -61,11 +61,12 @@ npm run dev             # 监听 http://localhost:5173，自动代理 /api 到 3
 
 ### Docker 部署（推荐）
 
-```bash
-# 构建镜像
-docker build -t asset-manager:6.06 .
+**方式一：直接拉取阿里云镜像（推荐，无需本地构建）**
 
-# 启动（参考 start_v6.06_ldap.sh；JWT_SECRET 等全部配置在 server/.env 中）
+```bash
+docker pull registry.cn-hangzhou.aliyuncs.com/wuxidocker/asset-manager:6.06_ai
+
+# 启动（JWT_SECRET 等全部配置在 server/.env 中）
 docker run -d \
   --name asset-manager-v6.06 \
   --network host \
@@ -73,7 +74,16 @@ docker run -d \
   --env-file server/.env \
   -e PORT=8092 \
   --restart unless-stopped \
-  asset-manager:6.06
+  registry.cn-hangzhou.aliyuncs.com/wuxidocker/asset-manager:6.06_ai
+```
+
+**方式二：本地构建**
+
+```bash
+# 构建镜像
+docker build -t asset-manager:6.06 .
+
+# 启动（将上面命令中的镜像名替换为 asset-manager:6.06）
 ```
 
 访问 `https://<服务器IP>:8092`（自签 HTTPS 证书）。
