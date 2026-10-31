@@ -61,7 +61,10 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
   const deleteAsset = useAssetStore((s) => s.deleteAsset);
   const batchDeleteAssets = useAssetStore((s) => s.batchDeleteAssets);
   const loading = useAssetStore((s) => s.loading);
+  const currentUser = useAuthStore((s) => s.currentUser);
   const { hasPermission, isSuperAdmin } = useAuthStore();
+  /** 详情查看（含备注）仅管理员及以上；普通用户禁止点击查看按钮 */
+  const canViewDetail = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const canCreate = hasPermission('create');
   const canEdit = hasPermission('edit');
   const canDelete = hasPermission('delete');
@@ -243,8 +246,8 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
     { key: 'status', label: '状态', width: 70, sortable: true },
     { key: 'location', label: '位置', width: 85, sortable: true },
     { key: 'remark', label: '备注', width: 140 },
-    { key: 'wiredMacs', label: '有线MAC', width: 110 },
-    { key: 'wirelessMacs', label: '无线MAC', width: 110 },
+    { key: 'wiredMacs', label: '有线MAC', width: 110, sortable: true },
+    { key: 'wirelessMacs', label: '无线MAC', width: 110, sortable: true },
     { key: 'hostnames', label: '主机名', width: 90 },
   ];
   const COLUMN_VIEW_KEY = 'asset-table-view-v1';
@@ -641,10 +644,12 @@ const AssetTable: React.FC<AssetTableProps> = ({ globalSearch, jumpFilter }) => 
                           ))}
                           <TableCell>
                             <Box sx={{ display: 'flex', gap: 0.5 }}>
-                              <Tooltip title="查看">
-                                <IconButton size="small" onClick={() => handleView(asset)} color="primary">
-                                  <ViewIcon fontSize="small" />
-                                </IconButton>
+                              <Tooltip title={canViewDetail ? '查看' : '无权查看详情'}>
+                                <span>
+                                  <IconButton size="small" onClick={() => handleView(asset)} color="primary" disabled={!canViewDetail}>
+                                    <ViewIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
                               </Tooltip>
                               <Tooltip title={!canEdit ? '您没有操作权限' : '编辑'}>
                                 <span>

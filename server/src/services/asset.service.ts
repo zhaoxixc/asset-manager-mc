@@ -76,6 +76,7 @@ export class AssetService {
       'asset_code': 'asset_code', 'purchase_date': 'purchase_date',
       'type': 'type', 'department': 'department', 'status': 'status',
       'location': 'location', 'user': '"user"',
+      'wiredMacs': 'wired_macs', 'wirelessMacs': 'wireless_macs',
     };
     const allowedSortFields = Object.values(sortFieldMap);
     const mappedSortBy = sortFieldMap[params.sortBy || ''] || 'created_at';
@@ -240,6 +241,7 @@ export class AssetService {
       'asset_code': 'asset_code', 'purchase_date': 'purchase_date',
       'type': 'type', 'department': 'department', 'status': 'status',
       'location': 'location', 'user': '"user"',
+      'wiredMacs': 'wired_macs', 'wirelessMacs': 'wireless_macs',
     };
     const allowedSortFields = Object.values(sortFieldMap);
     const mappedSortBy = sortFieldMap[params?.sortBy || ''] || 'created_at';
